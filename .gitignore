@@ -1,0 +1,50 @@
+# Python/runtime caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Generated runtime data
+static/media/
+workspace/uploads/
+workspace/report_figures/
+workspace/lightrag/
+workspace/knowledge_graph_visualization.html
+*.log
+
+# Large local model/checkpoint artifacts
+models/
+downloads/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+*.onnx
+*.pkl
+
+# Bundled third-party repos and generated outputs
+EchoMimicV3/
+EchoMimicV3/.git/
+EchoMimicV3/flash-pro/
+EchoMimicV3/test_outputs*/
+Wav2Lip/
+Wav2Lip/.git/
+Wav2Lip/checkpoints/
+Wav2Lip/temp/
+Wav2Lip/results/
+
+# Large training datasets and local caches
+data/psyqa/
+data-gym-cache/
+
+# Local editor/system state
+.vscode/
+.autodl/
+tmp*/

@@ -1,0 +1,4111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 心理陪伴多模态交互面板</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --page-bg: #f8f4ec;
+            --page-glow: rgba(255, 210, 160, 0.45);
+            --page-glow-cool: rgba(170, 207, 189, 0.35);
+            --card-bg: rgba(255, 255, 255, 0.84);
+            --card-border: rgba(217, 223, 214, 0.92);
+            --card-shadow: 0 28px 70px rgba(110, 121, 105, 0.12);
+            --text-main: #21362c;
+            --text-strong: #1c2e25;
+            --text-soft: #7f8d83;
+            --line-soft: #e8ece6;
+            --mint-50: #f1f8f4;
+            --mint-100: #e7f4ed;
+            --mint-200: #cde5d8;
+            --mint-300: #a6cfba;
+            --mint-400: #79b497;
+            --mint-500: #5d9a80;
+            --mint-600: #437662;
+            --amber-300: #f8d76d;
+            --amber-400: #f4c750;
+            --peach-300: #f8b89b;
+            --peach-400: #f19873;
+            --slate-200: #dbe4db;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            min-height: 100vh;
+            margin: 0;
+            color: var(--text-main);
+            font-family: "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 12% 12%, var(--page-glow), transparent 24%),
+                radial-gradient(circle at 86% 10%, rgba(255, 226, 186, 0.32), transparent 18%),
+                radial-gradient(circle at 60% 82%, var(--page-glow-cool), transparent 24%),
+                linear-gradient(180deg, #fdfbf7 0%, var(--page-bg) 100%);
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.75), transparent 25%),
+                radial-gradient(circle at 70% 32%, rgba(255, 255, 255, 0.42), transparent 22%);
+            filter: blur(24px);
+        }
+
+        .dashboard-shell {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            min-height: 100vh;
+            padding: 16px 18px 18px;
+            overflow: hidden;
+        }
+
+        .page-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 14px;
+            flex: 0 0 auto;
+        }
+
+        .page-title {
+            font-size: clamp(1.7rem, 2.5vw, 2.5rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            color: var(--text-strong);
+            line-height: 1.03;
+        }
+
+        .page-subtitle {
+            margin-top: 8px;
+            font-size: 1rem;
+            color: #8f9890;
+            font-weight: 600;
+        }
+
+        .connection-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            border-radius: 999px;
+            border: 1px solid rgba(214, 221, 212, 0.95);
+            background: rgba(255, 255, 255, 0.72);
+            box-shadow: 0 12px 32px rgba(140, 151, 136, 0.12);
+            color: #54625a;
+            font-size: 1rem;
+            font-weight: 700;
+            white-space: nowrap;
+            backdrop-filter: blur(14px);
+        }
+
+        .connection-pill .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            background: #78c88d;
+            box-shadow: 0 0 0 6px rgba(120, 200, 141, 0.16);
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: minmax(300px, 1.08fr) minmax(320px, 0.98fr) minmax(300px, 1fr);
+            gap: 18px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .side-column {
+            display: grid;
+            grid-template-rows: minmax(0, 0.86fr) minmax(0, 1fr);
+            gap: 18px;
+            min-height: 0;
+        }
+
+        .panel-card {
+            position: relative;
+            min-height: 0;
+            height: 100%;
+            border-radius: 28px;
+            border: 1px solid var(--card-border);
+            background: var(--card-bg);
+            box-shadow: var(--card-shadow);
+            backdrop-filter: blur(18px);
+        }
+
+        .section-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 14px;
+        }
+
+        .section-head h2 {
+            margin: 0;
+            font-size: 1.55rem;
+            font-weight: 800;
+            color: var(--text-strong);
+            line-height: 1.15;
+        }
+
+        .section-head p {
+            margin: 6px 0 0;
+            color: #95a197;
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+
+        .ghost-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px;
+            padding: 0 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(218, 225, 217, 0.98);
+            background: rgba(255, 255, 255, 0.92);
+            color: #5d6e64;
+            font-size: 0.92rem;
+            font-weight: 700;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+        }
+
+        .ghost-pill.buttonish {
+            transition: background 160ms ease, transform 160ms ease;
+        }
+
+        .ghost-pill.buttonish:hover {
+            background: #f8fbf8;
+            transform: translateY(-1px);
+        }
+
+        .counselor-card {
+            display: flex;
+            flex-direction: column;
+            padding: 18px 20px 16px;
+            color: white;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.18), transparent 26%),
+                radial-gradient(circle at 85% 12%, rgba(211, 243, 204, 0.22), transparent 20%),
+                linear-gradient(160deg, #89bfab 0%, #75b09a 36%, #5a8d7c 100%);
+            border-color: rgba(195, 226, 212, 0.45);
+        }
+
+        .counselor-card::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 42%, rgba(23, 56, 45, 0.08));
+            pointer-events: none;
+        }
+
+        .counselor-card > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .mode-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.52);
+            background: rgba(255, 255, 255, 0.1);
+            color: #f8fdf9;
+            font-size: 0.92rem;
+            font-weight: 700;
+            backdrop-filter: blur(8px);
+        }
+
+        .mode-pill i {
+            font-size: 0.95rem;
+            opacity: 0.95;
+        }
+
+        .counselor-title {
+            font-size: 1.58rem;
+            font-weight: 800;
+            line-height: 1.12;
+        }
+
+        .counselor-subtitle {
+            margin-top: 8px;
+            font-size: 0.96rem;
+            color: rgba(241, 249, 244, 0.9);
+            font-weight: 600;
+        }
+
+        .video-shell {
+            position: relative;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+            margin-top: 10px;
+            border-radius: 24px;
+            background:
+                radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.36), transparent 26%),
+                linear-gradient(180deg, rgba(238, 247, 242, 0.7) 0%, rgba(196, 225, 211, 0.52) 100%);
+            transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+            border: 1px solid rgba(255, 255, 255, 0.24);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+        }
+
+        .video-shell.active {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 44px rgba(45, 91, 71, 0.2);
+        }
+
+        .video-shell.audio-only::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(67, 118, 98, 0.08));
+            pointer-events: none;
+        }
+
+        #avatar-image,
+        #human-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center top;
+        }
+
+        #playback-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 22;
+            align-items: center;
+            justify-content: center;
+            background: rgba(34, 66, 55, 0.3);
+            color: white;
+            backdrop-filter: blur(5px);
+        }
+
+        #playback-overlay span {
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            background: rgba(36, 72, 59, 0.58);
+            padding: 14px 20px;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .presence-pill {
+            position: absolute;
+            left: 14px;
+            top: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.72);
+            color: #466758;
+            font-size: 0.88rem;
+            font-weight: 700;
+            box-shadow: 0 10px 24px rgba(70, 103, 88, 0.12);
+            backdrop-filter: blur(8px);
+        }
+
+        .pulse-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            background: #73c58d;
+            animation: pulseGlow 1.6s ease-in-out infinite;
+        }
+
+        @keyframes pulseGlow {
+            0% { transform: scale(0.95); opacity: 0.52; }
+            50% { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.52; }
+        }
+
+        .subtitle-box {
+            position: absolute;
+            inset-inline: 0;
+            bottom: 0;
+            padding: 12px 14px 14px;
+            background: linear-gradient(180deg, rgba(50, 93, 76, 0) 0%, rgba(57, 104, 85, 0.82) 100%);
+            color: white;
+        }
+
+        .subtitle-tag {
+            margin-bottom: 5px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: rgba(234, 246, 239, 0.8);
+            text-transform: uppercase;
+        }
+
+        .subtitle-copy {
+            font-size: 0.92rem;
+            line-height: 1.55;
+            color: #f7fbf8;
+            text-shadow: 0 1px 2px rgba(33, 52, 42, 0.16);
+        }
+
+        .support-note {
+            margin-top: 10px;
+            padding: 12px 14px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.14);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+            color: #f7fbf8;
+        }
+
+        .support-note strong {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.98rem;
+            font-weight: 700;
+        }
+
+        .support-note p {
+            margin: 0;
+            font-size: 0.9rem;
+            line-height: 1.52;
+            color: rgba(244, 251, 246, 0.92);
+        }
+
+        .voice-trigger {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            width: 100%;
+            margin-top: 10px;
+            padding: 13px 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            transition: transform 160ms ease, background 160ms ease;
+        }
+
+        .voice-trigger:hover {
+            transform: translateY(-1px);
+            background: rgba(255, 255, 255, 0.14);
+        }
+
+        .voice-trigger .left,
+        .voice-trigger .right {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .voice-trigger .left i,
+        .voice-trigger .right i {
+            font-size: 1.25rem;
+            opacity: 0.95;
+        }
+
+        .voice-trigger span {
+            font-size: 0.96rem;
+            font-weight: 700;
+        }
+
+        .card-foot {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-top: 8px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.18);
+            color: rgba(241, 249, 244, 0.9);
+            font-size: 0.88rem;
+            font-weight: 700;
+        }
+
+        .card-foot button {
+            color: #f5fbf7;
+            font-size: 0.88rem;
+            font-weight: 700;
+        }
+
+        .conversation-card {
+            display: flex;
+            flex-direction: column;
+            padding: 20px 20px 16px;
+        }
+
+        .messages {
+            min-height: 0;
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .messages::-webkit-scrollbar-thumb {
+            background: rgba(176, 190, 178, 0.8);
+            border-radius: 999px;
+        }
+
+        .message-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+
+        .message-row.user {
+            flex-direction: row-reverse;
+        }
+
+        .message-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            flex: 0 0 42px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, #eef8f1, #dcefe4);
+            border: 1px solid #d4e7db;
+            color: var(--mint-500);
+            box-shadow: 0 10px 20px rgba(117, 170, 142, 0.14);
+        }
+
+        .message-row.user .message-icon {
+            background: linear-gradient(180deg, #ffffff, #eef1f4);
+            border-color: #dde4eb;
+            color: #7d8794;
+        }
+
+        .message-stack {
+            max-width: calc(100% - 56px);
+        }
+
+        .message-bubble {
+            position: relative;
+            padding: 14px 16px;
+            border-radius: 20px;
+            line-height: 1.6;
+            font-size: 0.96rem;
+            font-weight: 600;
+            white-space: normal;
+            word-break: break-word;
+            box-shadow: 0 12px 30px rgba(114, 130, 115, 0.08);
+        }
+
+        .message-row.assistant .message-bubble {
+            background: linear-gradient(135deg, #f0f7f2, #f7fbf8);
+            border: 1px solid #e1ece4;
+            color: #446254;
+            border-top-left-radius: 12px;
+        }
+
+        .message-row.user .message-bubble {
+            background: white;
+            border: 1px solid #e5eaef;
+            color: #4b5967;
+            border-top-right-radius: 12px;
+        }
+
+        .message-row.loading .message-bubble {
+            color: #7f8d83;
+            font-style: italic;
+        }
+
+        .quick-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .quick-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 40px;
+            padding: 0 14px;
+            border-radius: 999px;
+            border: 1px solid #dfe9e1;
+            background: #fbfdfb;
+            color: #597267;
+            font-size: 0.88rem;
+            font-weight: 700;
+            transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+        }
+
+        .quick-action:hover {
+            transform: translateY(-1px);
+            background: white;
+            box-shadow: 0 12px 24px rgba(133, 150, 134, 0.12);
+        }
+
+        .composer-shell {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-top: 12px;
+            padding: 8px 10px 8px 14px;
+            border-radius: 999px;
+            border: 1px solid #e1e8e2;
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        }
+
+        .composer-mode {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .mode-switch {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px;
+            border: 1px solid #dde8e0;
+            border-radius: 999px;
+            background: rgba(247, 250, 247, 0.9);
+        }
+
+        .mode-switch button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 34px;
+            padding: 0 12px;
+            border-radius: 999px;
+            color: #708178;
+            font-size: 0.86rem;
+            font-weight: 800;
+        }
+
+        .mode-switch button.active {
+            background: #ffffff;
+            color: #4f7e65;
+            box-shadow: 0 8px 18px rgba(110, 143, 123, 0.14);
+        }
+
+        .voice-panel {
+            display: none;
+            margin-top: 10px;
+            padding: 12px;
+            border: 1px solid #dfece4;
+            border-radius: 18px;
+            background:
+                linear-gradient(135deg, rgba(238, 248, 242, 0.96), rgba(255, 250, 244, 0.9)),
+                #ffffff;
+        }
+
+        .voice-panel.active {
+            display: block;
+        }
+
+        .voice-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .voice-record-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 46px;
+            height: 46px;
+            flex: 0 0 46px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, #f6a37f, #de775b);
+            color: #fff;
+            box-shadow: 0 14px 26px rgba(222, 119, 91, 0.22);
+        }
+
+        .voice-record-btn.recording {
+            animation: recordPulse 1.1s ease-in-out infinite;
+        }
+
+        @keyframes recordPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 14px 26px rgba(222, 119, 91, 0.22); }
+            50% { transform: scale(1.06); box-shadow: 0 18px 34px rgba(222, 119, 91, 0.32); }
+        }
+
+        .voice-status {
+            min-width: 0;
+            flex: 1;
+            color: #5f756a;
+            font-size: 0.88rem;
+            font-weight: 800;
+            line-height: 1.45;
+        }
+
+        .voice-bars {
+            display: flex;
+            align-items: end;
+            gap: 4px;
+            height: 38px;
+        }
+
+        .voice-bars span {
+            width: 5px;
+            height: 12px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, #87caa0, #f0ad84);
+            opacity: 0.72;
+            transform-origin: bottom;
+        }
+
+        .voice-panel.active .voice-bars span {
+            animation: voiceBar 900ms ease-in-out infinite;
+        }
+
+        .voice-bars span:nth-child(2) { animation-delay: 90ms; }
+        .voice-bars span:nth-child(3) { animation-delay: 180ms; }
+        .voice-bars span:nth-child(4) { animation-delay: 270ms; }
+        .voice-bars span:nth-child(5) { animation-delay: 360ms; }
+        .voice-bars span:nth-child(6) { animation-delay: 450ms; }
+
+        @keyframes voiceBar {
+            0%, 100% { transform: scaleY(0.55); }
+            50% { transform: scaleY(1.8); }
+        }
+
+        .voice-emotion-preview {
+            display: grid;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .voice-emotion-row {
+            display: grid;
+            grid-template-columns: minmax(52px, 72px) 1fr minmax(42px, auto);
+            align-items: center;
+            gap: 8px;
+            color: #62746b;
+            font-size: 0.84rem;
+            font-weight: 800;
+        }
+
+        .voice-emotion-track {
+            height: 8px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: rgba(215, 227, 218, 0.84);
+        }
+
+        .voice-emotion-fill {
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #84c39d, #f0ad84);
+        }
+
+        .composer-shell input {
+            flex: 1;
+            min-width: 0;
+            border: 0;
+            background: transparent;
+            color: #51685c;
+            font-size: 0.98rem;
+            font-weight: 600;
+            outline: none;
+        }
+
+        .composer-shell input::placeholder {
+            color: #b3bbb5;
+        }
+
+        .send-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 46px;
+            height: 46px;
+            flex: 0 0 46px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, #84c39d, #66a980);
+            color: white;
+            box-shadow: 0 14px 28px rgba(102, 169, 128, 0.28);
+            transition: transform 160ms ease, box-shadow 160ms ease;
+        }
+
+        .send-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 18px 34px rgba(102, 169, 128, 0.32);
+        }
+
+        .send-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .privacy-note {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 10px;
+            color: #9aa49d;
+            font-size: 0.84rem;
+            font-weight: 700;
+        }
+
+        .emotion-card,
+        .graph-card {
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .emotion-chart {
+            flex: 1;
+            min-height: 180px;
+        }
+
+        .emotion-legend {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px 18px;
+            margin-top: 2px;
+            min-height: 34px;
+        }
+
+        .emotion-legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            color: #717d74;
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .emotion-legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.9);
+        }
+
+        .emotion-insight {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 12px;
+            padding: 12px 14px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #f1f8f3, #f8fbf7);
+            border: 1px solid #e2ede5;
+            color: #5a7868;
+            font-size: 0.92rem;
+            font-weight: 700;
+        }
+
+        .emotion-insight i {
+            color: #72b38d;
+        }
+
+        .graph-card {
+            background:
+                radial-gradient(circle at 18% 18%, rgba(166, 207, 186, 0.16), transparent 20%),
+                radial-gradient(circle at 82% 28%, rgba(248, 184, 155, 0.12), transparent 18%),
+                rgba(255, 255, 255, 0.86);
+        }
+
+        .graph-summary {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px 16px;
+            margin-bottom: 10px;
+            color: #818b83;
+            font-size: 0.88rem;
+            font-weight: 700;
+        }
+
+        .graph-summary-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .graph-summary-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+        }
+
+        .graph-canvas {
+            min-height: 0;
+            flex: 1;
+            border-radius: 26px;
+        }
+
+        .graph-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #edf0eb;
+            color: #808b83;
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .graph-status {
+            margin-top: 8px;
+            color: #99a39b;
+            font-size: 0.84rem;
+            font-weight: 700;
+            text-align: right;
+        }
+
+        .graph-explorer-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 80;
+            display: flex;
+            align-items: stretch;
+            justify-content: center;
+            padding: 22px;
+            background: rgba(26, 42, 34, 0.34);
+            backdrop-filter: blur(10px);
+        }
+
+        .graph-explorer-shell {
+            width: min(1560px, 100%);
+            height: min(920px, calc(100vh - 44px));
+            display: grid;
+            grid-template-columns: 320px minmax(0, 1fr) 340px;
+            border-radius: 32px;
+            overflow: hidden;
+            border: 1px solid rgba(213, 222, 214, 0.98);
+            background: rgba(250, 252, 249, 0.96);
+            box-shadow: 0 34px 90px rgba(44, 64, 53, 0.24);
+        }
+
+        .graph-explorer-panel {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        .graph-explorer-panel.left {
+            border-right: 1px solid #e3ebe3;
+        }
+
+        .graph-explorer-panel.right {
+            border-left: 1px solid #e3ebe3;
+        }
+
+        .graph-explorer-body {
+            flex: 1;
+            min-height: 0;
+            overflow: auto;
+            padding: 18px 20px 20px;
+        }
+
+        .graph-explorer-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 18px 20px 0;
+        }
+
+        .graph-explorer-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: #1f3127;
+        }
+
+        .graph-explorer-subtitle {
+            margin-top: 6px;
+            color: #7d8b82;
+            font-size: 0.88rem;
+            font-weight: 700;
+        }
+
+        .graph-explorer-close {
+            width: 42px;
+            height: 42px;
+            border-radius: 999px;
+            border: 1px solid #dde7df;
+            background: rgba(255, 255, 255, 0.96);
+            color: #53665b;
+            font-size: 1rem;
+        }
+
+        .graph-explorer-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .graph-explorer-stat {
+            padding: 12px 13px;
+            border-radius: 16px;
+            border: 1px solid #e7eee8;
+            background: #f8fbf7;
+        }
+
+        .graph-explorer-stat strong {
+            display: block;
+            color: #274337;
+            font-size: 1.35rem;
+            font-weight: 800;
+            line-height: 1.1;
+        }
+
+        .graph-explorer-stat span {
+            color: #819086;
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        .graph-explorer-control {
+            display: grid;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .graph-explorer-control label {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            color: #748178;
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        .graph-explorer-control input[type="search"],
+        .graph-explorer-control select {
+            width: 100%;
+            border: 1px solid #dbe6dd;
+            border-radius: 12px;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.98);
+            color: #1f3127;
+            font-size: 0.94rem;
+            outline: none;
+        }
+
+        .graph-explorer-control input[type="range"] {
+            width: 100%;
+            accent-color: #5d9a80;
+        }
+
+        .graph-explorer-legend {
+            display: grid;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .graph-explorer-legend-item {
+            display: grid;
+            grid-template-columns: 14px 1fr auto;
+            gap: 10px;
+            align-items: center;
+            color: #5f6e64;
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .graph-explorer-swatch {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        .graph-explorer-stage {
+            position: relative;
+            min-width: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 14% 18%, rgba(196, 226, 208, 0.28), transparent 20%),
+                radial-gradient(circle at 84% 16%, rgba(243, 217, 198, 0.22), transparent 18%),
+                linear-gradient(180deg, #fbfdfb 0%, #f5f9f4 100%);
+        }
+
+        .graph-explorer-toolbar {
+            position: absolute;
+            top: 18px;
+            left: 18px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            z-index: 3;
+        }
+
+        .graph-explorer-toolbar button {
+            border-radius: 999px;
+            padding: 9px 14px;
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid #dbe5de;
+            color: #4d6257;
+            font-size: 0.86rem;
+            font-weight: 700;
+        }
+
+        .graph-explorer-svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .graph-explorer-status {
+            position: absolute;
+            left: 18px;
+            right: 18px;
+            bottom: 18px;
+            padding: 10px 14px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.88);
+            border: 1px solid #dfe8e1;
+            color: #75837a;
+            font-size: 0.86rem;
+            font-weight: 700;
+            box-shadow: 0 10px 24px rgba(74, 96, 82, 0.08);
+        }
+
+        .graph-explorer-empty {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px;
+            text-align: center;
+            color: #819086;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .graph-explorer-detail-title {
+            color: #22382d;
+            font-size: 1.12rem;
+            font-weight: 800;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+
+        .graph-explorer-pill {
+            display: inline-block;
+            margin: 10px 8px 0 0;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: #edf4ef;
+            color: #4d6258;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        .graph-explorer-section {
+            margin-top: 18px;
+        }
+
+        .graph-explorer-section h3 {
+            margin: 0 0 8px;
+            color: #5e6f64;
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .graph-explorer-copy {
+            color: #617167;
+            font-size: 0.9rem;
+            line-height: 1.65;
+            word-break: break-word;
+        }
+
+        .graph-explorer-edge {
+            stroke: #99a9a0;
+            stroke-opacity: 0.34;
+            cursor: pointer;
+        }
+
+        .graph-explorer-edge.active {
+            stroke: #5d9a80;
+            stroke-opacity: 0.9;
+        }
+
+        .graph-explorer-node circle {
+            stroke: #fff;
+            stroke-width: 1.5px;
+            cursor: pointer;
+        }
+
+        .graph-explorer-node text {
+            pointer-events: none;
+            font-size: 11px;
+            fill: #2b3a33;
+            paint-order: stroke;
+            stroke: rgba(255, 255, 255, 0.96);
+            stroke-width: 4px;
+            stroke-linejoin: round;
+        }
+
+        .graph-explorer-node.dim,
+        .graph-explorer-edge.dim {
+            opacity: 0.12;
+        }
+
+        .graph-explorer-node.active circle {
+            stroke: #17251f;
+            stroke-width: 2.5px;
+        }
+
+        @media (max-width: 1180px) {
+            .graph-explorer-shell {
+                grid-template-columns: 280px 1fr;
+            }
+
+            .graph-explorer-panel.right {
+                display: none;
+            }
+        }
+
+        @media (max-width: 860px) {
+            .graph-explorer-overlay {
+                padding: 12px;
+            }
+
+            .graph-explorer-shell {
+                grid-template-columns: 1fr;
+                height: calc(100vh - 24px);
+            }
+
+            .graph-explorer-panel.left {
+                display: none;
+            }
+        }
+
+        @media (max-width: 1480px) {
+            .dashboard-grid {
+                grid-template-columns: minmax(320px, 1.06fr) minmax(320px, 0.94fr);
+                grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+            }
+
+            .counselor-card {
+                grid-column: 1;
+                grid-row: 1 / span 2;
+            }
+
+            .conversation-card {
+                grid-column: 2;
+                grid-row: 1;
+            }
+
+            .side-column {
+                grid-column: 2;
+                grid-row: 2;
+                grid-template-rows: minmax(0, 0.92fr) minmax(0, 1fr);
+            }
+        }
+
+        @media (max-width: 1100px) {
+            body {
+                overflow: auto;
+            }
+
+            .dashboard-shell {
+                height: auto;
+                min-height: 100vh;
+                overflow: visible;
+            }
+
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto;
+                flex: none;
+            }
+
+            .counselor-card,
+            .conversation-card,
+            .side-column {
+                grid-column: auto;
+                grid-row: auto;
+            }
+
+            .side-column {
+                grid-template-rows: auto auto;
+            }
+
+            .video-shell {
+                min-height: 420px;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .dashboard-shell {
+                padding: 20px 16px 24px;
+            }
+
+            .page-header {
+                flex-direction: column;
+            }
+
+            .page-title {
+                font-size: 1.9rem;
+            }
+
+            .page-subtitle {
+                font-size: 1rem;
+            }
+
+            .panel-card,
+            .emotion-card,
+            .graph-card,
+            .conversation-card,
+            .counselor-card {
+                border-radius: 26px;
+            }
+
+            .conversation-card,
+            .emotion-card,
+            .graph-card,
+            .counselor-card {
+                padding: 20px;
+            }
+
+            .section-head h2,
+            .counselor-title {
+                font-size: 1.5rem;
+            }
+
+            .message-bubble {
+                font-size: 0.98rem;
+                padding: 15px 18px;
+            }
+
+            .message-icon {
+                width: 42px;
+                height: 42px;
+                flex-basis: 42px;
+            }
+
+            .voice-trigger {
+                padding: 16px 18px;
+            }
+
+            .video-shell {
+                min-height: 420px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-shell">
+        <header class="page-header">
+            <div>
+                <h1 class="page-title">AI 心理陪伴多模态面板</h1>
+                <p class="page-subtitle">LightRAG 知识图谱检索、数字人语音播报和情绪感知在同一界面联动。</p>
+            </div>
+            <div class="connection-pill">
+                <span class="dot"></span>
+                <span id="connection-label">连接中</span>
+            </div>
+        </header>
+
+        <main class="dashboard-grid">
+            <section class="panel-card counselor-card">
+                <div class="section-head">
+                    <div>
+                        <h2 class="counselor-title">数字人心理咨询师</h2>
+                        <p class="counselor-subtitle">随时倾听，专业陪伴，温暖支持</p>
+                    </div>
+                    <div id="media-chip" class="mode-pill">
+                        <i class="fa-solid fa-wave-square"></i>
+                        <span>语音模式</span>
+                    </div>
+                </div>
+
+                <div id="video-shell" class="video-shell">
+                    <img
+                        id="avatar-image"
+                        src="/static/image.png"
+                        alt="数字人心理咨询师"
+                    >
+                    <video
+                        id="human-video"
+                        class="hidden"
+                        poster="/static/image.png"
+                        autoplay
+                        playsinline
+                        webkit-playsinline="true"
+                        preload="auto"
+                        muted
+                    ></video>
+                    <audio id="human-audio" preload="auto"></audio>
+
+                    <button id="playback-overlay" type="button" class="hidden">
+                        <span>点击播放数字人视频</span>
+                    </button>
+
+                    <div class="presence-pill">
+                        <span class="pulse-dot"></span>
+                        <span id="media-badge">待机中</span>
+                    </div>
+
+                    <div class="subtitle-box">
+                        <div class="subtitle-tag">咨询摘要</div>
+                        <div id="assistant-subtitle" class="subtitle-copy">我会在这里同步展示回应内容，并在生成视频或语音后自动开始播报。</div>
+                    </div>
+                </div>
+
+                <div class="support-note">
+                    <strong>我在这里倾听和陪伴你</strong>
+                    <p>你可以和我分享任何困扰或感受，我会结合情绪分析与心理知识图谱，给你更贴近当下状态的回应。</p>
+                </div>
+
+                <button type="button" class="voice-trigger" onclick="focusComposer()">
+                    <span class="left">
+                        <i class="fa-solid fa-microphone-lines"></i>
+                        <span id="media-status">点击开始语音对话</span>
+                    </span>
+                    <span class="right">
+                        <i class="fa-solid fa-wave-square"></i>
+                    </span>
+                </button>
+
+                <div class="card-foot">
+                    <span>当前模式：倾听陪伴模式</span>
+                    <button type="button" onclick="focusComposer()">切换模式 <i class="fa-solid fa-angle-right ml-1"></i></button>
+                </div>
+            </section>
+
+            <section class="panel-card conversation-card">
+                <div class="section-head">
+                    <div>
+                        <h2>对话咨询区</h2>
+                        <p>安全保密的对话环境</p>
+                    </div>
+                </div>
+
+                <div id="chat-messages" class="messages"></div>
+
+                <div class="quick-actions">
+                    <button type="button" class="quick-action" onclick="useQuickPrompt('最近工作压力很大，经常焦虑失眠，我该怎么办？')">
+                        <i class="fa-regular fa-compass"></i>
+                        <span>压力来源分析</span>
+                    </button>
+                    <button type="button" class="quick-action" onclick="useQuickPrompt('我最近情绪起伏比较大，能给我一些情绪调节建议吗？')">
+                        <i class="fa-regular fa-heart"></i>
+                        <span>情绪调节建议</span>
+                    </button>
+                    <button type="button" class="quick-action" onclick="useQuickPrompt('我连续失眠一周了，晚上总是停不下脑子，有什么改善方法？')">
+                        <i class="fa-regular fa-moon"></i>
+                        <span>睡眠改善方法</span>
+                    </button>
+                </div>
+
+                <div class="composer-mode">
+                    <div class="mode-switch" aria-label="输入模式">
+                        <button id="text-mode-btn" type="button" class="active" onclick="setInputMode('text')" aria-label="文本输入">
+                            <i class="fa-solid fa-keyboard"></i>
+                            <span>文本</span>
+                        </button>
+                        <button id="voice-mode-btn" type="button" onclick="setInputMode('voice')" aria-label="语音输入">
+                            <i class="fa-solid fa-microphone-lines"></i>
+                            <span>语音</span>
+                        </button>
+                    </div>
+                    <span id="input-mode-label" class="privacy-note">文本情绪识别</span>
+                </div>
+
+                <div id="voice-panel" class="voice-panel" aria-live="polite">
+                    <div class="voice-controls">
+                        <button id="voice-record-btn" type="button" class="voice-record-btn" onclick="toggleVoiceRecording()" aria-label="开始或停止录音">
+                            <i class="fa-solid fa-microphone-lines"></i>
+                        </button>
+                        <div id="voice-status" class="voice-status">点击麦克风开始语音输入。</div>
+                        <div class="voice-bars" aria-hidden="true">
+                            <span></span><span></span><span></span><span></span><span></span><span></span>
+                        </div>
+                    </div>
+                    <div id="voice-emotion-preview" class="voice-emotion-preview"></div>
+                </div>
+
+                <div class="composer-shell">
+                    <input
+                        id="chat-input"
+                        type="text"
+                        placeholder="输入你想聊的话题..."
+                        onkeypress="handleKeyPress(event)"
+                    >
+                    <button
+                        id="send-btn"
+                        type="button"
+                        class="send-btn"
+                        onclick="sendMessage()"
+                        aria-label="发送消息"
+                    >
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+
+                <div class="privacy-note">
+                    <i class="fa-solid fa-lock"></i>
+                    <span>对话内容严格保密，仅用于提供更好的帮助</span>
+                </div>
+            </section>
+
+            <div class="side-column">
+                <section class="panel-card emotion-card">
+                    <div class="section-head">
+                        <div>
+                            <h2>实时情绪感知</h2>
+                            <p>多维度情绪状态分析</p>
+                        </div>
+                        <div class="ghost-pill">情绪记录</div>
+                    </div>
+
+                    <div id="emotion-chart" class="emotion-chart"></div>
+                    <div id="emotion-legend" class="emotion-legend"></div>
+                    <div id="emotion-insight" class="emotion-insight">
+                        <i class="fa-solid fa-seedling"></i>
+                        <span>你的情绪状态会在这里更新，我会根据识别结果给出更贴近当下的建议。</span>
+                    </div>
+                </section>
+
+                <section class="panel-card graph-card">
+                    <div class="section-head">
+                        <div>
+                            <h2>心理知识图谱</h2>
+                            <p>多维知识关联分析</p>
+                        </div>
+                        <button type="button" class="ghost-pill buttonish" onclick="openGraphExplorer()">打开图谱</button>
+                    </div>
+
+                    <div class="graph-summary">
+                        <span class="graph-summary-item">
+                            <span class="graph-summary-dot" style="background:#7cc59a;"></span>
+                            <span>核心概念</span>
+                        </span>
+                        <span class="graph-summary-item">
+                            <span class="graph-summary-dot" style="background:#99bfe9;"></span>
+                            <span>相关因素</span>
+                        </span>
+                        <span class="graph-summary-item">
+                            <span class="graph-summary-dot" style="background:#f4b086;"></span>
+                            <span>调节策略</span>
+                        </span>
+                    </div>
+
+                    <div id="graph-chart" class="graph-canvas"></div>
+                    <div class="graph-footer">
+                        <div id="graph-count">已关联 0 个知识点</div>
+                    </div>
+                    <div id="kg-status" class="graph-status">正在加载图谱...</div>
+                </section>
+            </div>
+        </main>
+
+        <div id="graph-explorer" class="graph-explorer-overlay hidden" aria-hidden="true">
+            <div class="graph-explorer-shell" role="dialog" aria-modal="true" aria-label="知识图谱浏览器">
+                <aside class="graph-explorer-panel left">
+                    <div class="graph-explorer-head">
+                        <div>
+                            <div class="graph-explorer-title">知识图谱浏览器</div>
+                            <div class="graph-explorer-subtitle">按节点、类型、关系和度数自由探索心理知识结构</div>
+                        </div>
+                    </div>
+                    <div class="graph-explorer-body">
+                        <div class="graph-explorer-stats">
+                            <div class="graph-explorer-stat"><strong id="gx-node-count">0</strong><span>当前节点</span></div>
+                            <div class="graph-explorer-stat"><strong id="gx-link-count">0</strong><span>当前关系</span></div>
+                        </div>
+
+                        <div class="graph-explorer-control">
+                            <label>搜索节点</label>
+                            <input id="gx-search" type="search" placeholder="输入焦虑、睡眠、压力、呼吸..." />
+                        </div>
+
+                        <div class="graph-explorer-control">
+                            <label>实体类型</label>
+                            <select id="gx-type-filter">
+                                <option value="__all__">全部类型</option>
+                            </select>
+                        </div>
+
+                        <div class="graph-explorer-control">
+                            <label>关系类型</label>
+                            <select id="gx-relation-filter">
+                                <option value="__all__">全部关系</option>
+                            </select>
+                        </div>
+
+                        <div class="graph-explorer-control">
+                            <label><span>最大节点数</span><span id="gx-limit-label">180</span></label>
+                            <input id="gx-limit" type="range" min="20" max="500" step="10" value="180" />
+                        </div>
+
+                        <div class="graph-explorer-control">
+                            <label><span>最小度数</span><span id="gx-degree-label">0</span></label>
+                            <input id="gx-degree" type="range" min="0" max="20" step="1" value="0" />
+                        </div>
+
+                        <div class="graph-explorer-section">
+                            <h3>类型图例</h3>
+                            <div id="gx-legend" class="graph-explorer-legend"></div>
+                        </div>
+                    </div>
+                </aside>
+
+                <main class="graph-explorer-stage">
+                    <div class="graph-explorer-toolbar">
+                        <button type="button" id="gx-show-all">全图浏览</button>
+                        <button type="button" id="gx-show-focus">本轮命中</button>
+                        <button type="button" id="gx-reset-view">重置视图</button>
+                        <button type="button" id="gx-close">关闭</button>
+                    </div>
+                    <svg id="gx-svg" class="graph-explorer-svg" aria-label="知识图谱"></svg>
+                    <div id="gx-empty" class="graph-explorer-empty hidden">图谱数据准备中。</div>
+                    <div id="gx-status" class="graph-explorer-status">图谱已载入，点击节点或关系查看详情。</div>
+                </main>
+
+                <aside class="graph-explorer-panel right">
+                    <div class="graph-explorer-head">
+                        <div>
+                            <div class="graph-explorer-title">详细信息</div>
+                            <div class="graph-explorer-subtitle">点击节点或关系查看描述、类别与关联内容</div>
+                        </div>
+                        <button type="button" class="graph-explorer-close" onclick="closeGraphExplorer()" aria-label="关闭图谱浏览器">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="graph-explorer-body">
+                        <div id="gx-details" class="graph-explorer-copy">点击中间图谱中的节点或关系，这里会显示更详细的说明。</div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const avatarImageEl = document.getElementById("avatar-image");
+        const videoEl = document.getElementById("human-video");
+        const audioEl = document.getElementById("human-audio");
+        const videoShell = document.getElementById("video-shell");
+        const mediaChip = document.getElementById("media-chip");
+        const mediaBadge = document.getElementById("media-badge");
+        const mediaStatus = document.getElementById("media-status");
+        const subtitleEl = document.getElementById("assistant-subtitle");
+        const kgStatusEl = document.getElementById("kg-status");
+        const graphChartEl = document.getElementById("graph-chart");
+        const graphCountEl = document.getElementById("graph-count");
+        const chatMessagesEl = document.getElementById("chat-messages");
+        const chatInputEl = document.getElementById("chat-input");
+        const sendBtnEl = document.getElementById("send-btn");
+        const textModeBtn = document.getElementById("text-mode-btn");
+        const voiceModeBtn = document.getElementById("voice-mode-btn");
+        const inputModeLabelEl = document.getElementById("input-mode-label");
+        const voicePanelEl = document.getElementById("voice-panel");
+        const voiceRecordBtn = document.getElementById("voice-record-btn");
+        const voiceStatusEl = document.getElementById("voice-status");
+        const voiceEmotionPreviewEl = document.getElementById("voice-emotion-preview");
+        const playbackOverlayEl = document.getElementById("playback-overlay");
+        const emotionLegendEl = document.getElementById("emotion-legend");
+        const emotionInsightEl = document.getElementById("emotion-insight");
+        const connectionLabelEl = document.getElementById("connection-label");
+        const emotionChart = window.echarts ? echarts.init(document.getElementById("emotion-chart")) : null;
+        const graphExplorerEl = document.getElementById("graph-explorer");
+        const gxSvgEl = document.getElementById("gx-svg");
+        const gxStageEl = graphExplorerEl ? graphExplorerEl.querySelector(".graph-explorer-stage") : null;
+        const gxEmptyEl = document.getElementById("gx-empty");
+        const gxStatusEl = document.getElementById("gx-status");
+        const gxDetailsEl = document.getElementById("gx-details");
+        const gxNodeCountEl = document.getElementById("gx-node-count");
+        const gxLinkCountEl = document.getElementById("gx-link-count");
+        const gxSearchEl = document.getElementById("gx-search");
+        const gxTypeFilterEl = document.getElementById("gx-type-filter");
+        const gxRelationFilterEl = document.getElementById("gx-relation-filter");
+        const gxLimitEl = document.getElementById("gx-limit");
+        const gxLimitLabelEl = document.getElementById("gx-limit-label");
+        const gxDegreeEl = document.getElementById("gx-degree");
+        const gxDegreeLabelEl = document.getElementById("gx-degree-label");
+        const gxLegendEl = document.getElementById("gx-legend");
+        const gxShowAllBtn = document.getElementById("gx-show-all");
+        const gxShowFocusBtn = document.getElementById("gx-show-focus");
+        const gxResetViewBtn = document.getElementById("gx-reset-view");
+        const gxCloseBtn = document.getElementById("gx-close");
+
+        let globalGraphNodes = [];
+        let globalGraphLinks = [];
+        let pendingPlaybackType = null;
+        let currentHighlightNodes = [];
+        let currentHighlightEdges = [];
+        let graphNodePositions = {};
+        let graphActiveRenderKey = "";
+        let graphActivePayload = null;
+        let graphDragState = null;
+        let graphLastRenderMode = "empty";
+        let graphExplorerInitialized = false;
+        let graphExplorerDataset = null;
+        let graphExplorerSimulation = null;
+        let graphExplorerCurrentNodes = [];
+        let graphExplorerCurrentLinks = [];
+        let graphExplorerRootSelection = null;
+        let graphExplorerLinkLayer = null;
+        let graphExplorerNodeLayer = null;
+        let graphExplorerZoom = null;
+        const graphExplorerState = {
+            query: "",
+            type: "__all__",
+            relation: "__all__",
+            limit: 180,
+            minDegree: 0,
+            mode: "all",
+        };
+        const GRAPH_OVERVIEW_NODE_LIMIT = 54;
+        const GRAPH_OVERVIEW_EDGE_LIMIT = 90;
+        const GRAPH_FOCUS_NODE_LIMIT = 32;
+        const GRAPH_FOCUS_EDGE_LIMIT = 56;
+        const GRAPH_CAPSULE_LIMIT = 15;
+        const SILENT_AUDIO_DATA_URI = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+        let mediaPlaybackUnlocked = false;
+        let inputMode = "text";
+        let mediaRecorder = null;
+        let voiceStream = null;
+        let voiceChunks = [];
+        let voiceEmotionResult = null;
+        let speechRecognition = null;
+        let speechRecognitionActive = false;
+
+        const EMOTION_EMOJI = {
+            "喜悦": "😊", "悲伤": "😢", "愤怒": "😠", "恐惧": "😨", "惊讶": "😲",
+            "厌恶": "🤢", "平静": "😌", "紧张": "😰", "兴奋": "🤩", "感激": "🥰",
+            "关心": "💙", "好奇": "🤔", "困惑": "😕", "失望": "😞", "自豪": "😎",
+            "爱": "❤️", "乐观": "🌟", "烦躁": "😤", "尴尬": "😳", "认同": "👍",
+            "不认同": "👎", "钦佩": "👏", "有趣": "😄", "渴望": "🥺", "宽慰": "😮‍💨",
+            "领悟": "💡", "懊悔": "😔", "悲痛": "😭", "待分析": "🔍"
+        };
+
+        const EMOTION_COLORS = [
+            { c0: "#d9f2e1", c1: "#8cc9a0" },
+            { c0: "#fde7a9", c1: "#f3c756" },
+            { c0: "#ffd9c8", c1: "#f3a07f" },
+            { c0: "#dbeafa", c1: "#99bfe9" },
+            { c0: "#f2dff3", c1: "#cf8fd8" },
+            { c0: "#d9f0f3", c1: "#73b7bf" },
+        ];
+
+        const POSITIVE_EMOTIONS = new Set(["喜悦", "平静", "感激", "关心", "自豪", "爱", "乐观", "认同", "钦佩", "有趣", "宽慰", "领悟", "兴奋"]);
+        const NEGATIVE_EMOTIONS = new Set(["悲伤", "愤怒", "恐惧", "紧张", "困惑", "失望", "烦躁", "懊悔", "悲痛", "尴尬", "厌恶", "不认同"]);
+
+        const emotionOption = {
+            tooltip: {
+                trigger: "item",
+                backgroundColor: "rgba(255,255,255,0.98)",
+                borderColor: "rgba(214,223,214,0.95)",
+                borderWidth: 1,
+                textStyle: { color: "#33443d", fontSize: 13 },
+                formatter: function(p) {
+                    return `<strong>${EMOTION_EMOJI[p.name] || ""} ${p.name}</strong><br/>占比 <b>${formatPercentage(p.value)}</b>`;
+                }
+            },
+            legend: { show: false },
+            graphic: [
+                {
+                    type: "text",
+                    left: "center",
+                    top: "31%",
+                    style: {
+                        text: "🙂",
+                        textAlign: "center",
+                        fill: "#78b691",
+                        fontSize: 30,
+                    },
+                    id: "center-emoji",
+                },
+                {
+                    type: "text",
+                    left: "center",
+                    top: "47%",
+                    style: {
+                        text: "情绪状态",
+                        textAlign: "center",
+                        fill: "#9ba59d",
+                        fontSize: 15,
+                        fontWeight: 600,
+                    },
+                    id: "center-label",
+                },
+                {
+                    type: "text",
+                    left: "center",
+                    top: "57%",
+                    style: {
+                        text: "平稳偏积极",
+                        textAlign: "center",
+                        fill: "#5c9a7a",
+                        fontSize: 18,
+                        fontWeight: 700,
+                    },
+                    id: "center-sub",
+                },
+                {
+                    type: "text",
+                    left: "center",
+                    top: "67%",
+                    style: {
+                        text: "",
+                        textAlign: "center",
+                        fill: "#9aa49d",
+                        fontSize: 12,
+                    },
+                    id: "center-detail",
+                },
+            ],
+            series: [{
+                name: "情绪占比",
+                type: "pie",
+                radius: ["59%", "82%"],
+                center: ["50%", "44%"],
+                avoidLabelOverlap: false,
+                padAngle: 4,
+                itemStyle: {
+                    borderRadius: 12,
+                    borderColor: "#fff",
+                    borderWidth: 6,
+                },
+                label: { show: false },
+                labelLine: { show: false },
+                emphasis: { scaleSize: 8 },
+                data: [{ value: 100, name: "待分析" }],
+            }]
+        };
+
+        function applyEmotionColors(data) {
+            return data.map(function(item, i) {
+                const palette = EMOTION_COLORS[i % EMOTION_COLORS.length];
+                return {
+                    ...item,
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 1, 1, [
+                            { offset: 0, color: palette.c0 },
+                            { offset: 1, color: palette.c1 },
+                        ]),
+                        borderRadius: 12,
+                        borderColor: "#fff",
+                        borderWidth: 6,
+                    }
+                };
+            });
+        }
+
+        if (emotionChart) {
+            emotionOption.series[0].data = applyEmotionColors(emotionOption.series[0].data);
+            emotionChart.setOption(emotionOption);
+        }
+
+        function formatPercentage(value) {
+            const numeric = Number(value || 0);
+            if (!Number.isFinite(numeric)) {
+                return "0%";
+            }
+            const roundedInt = Math.round(numeric);
+            if (Math.abs(numeric - roundedInt) < 0.05) {
+                return `${roundedInt}%`;
+            }
+            return `${numeric.toFixed(1)}%`;
+        }
+
+        function escapeHtml(text) {
+            return String(text ?? "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function normalizeText(value) {
+            return String(value ?? "").trim().toLowerCase().replace(/\s+/g, "");
+        }
+
+        function isStrictMatch(a, b) {
+            const left = normalizeText(a);
+            const right = normalizeText(b);
+            if (!left || !right) return false;
+            return left === right || (left.length >= 2 && right.includes(left)) || (right.length >= 2 && left.includes(right));
+        }
+
+        function normalizeGraphCategoryLabel(value) {
+            const raw = String(value ?? "").trim();
+            if (!raw) return "Concept";
+            const normalized = raw.toLowerCase();
+            if (normalized === "unknown" || normalized === "未分类") {
+                return "Concept";
+            }
+            return raw;
+        }
+
+        function graphExplorerCategoryColor(type) {
+            const text = normalizeGraphCategoryLabel(type);
+            if (text.includes("情绪")) return "#f3a481";
+            if (text.includes("诱发") || text.includes("因素")) return "#8ab9e6";
+            if (text.includes("疏导") || text.includes("策略") || text.includes("方法")) return "#7cc59a";
+            if (text.includes("治疗")) return "#9d8de0";
+            return "#9dafb4";
+        }
+
+        function buildGraphExplorerDataset() {
+            const degreeMap = {};
+            globalGraphLinks.forEach(function(link) {
+                degreeMap[link.source] = (degreeMap[link.source] || 0) + 1;
+                degreeMap[link.target] = (degreeMap[link.target] || 0) + 1;
+            });
+
+            const nodes = globalGraphNodes.map(function(node) {
+                const type = normalizeGraphCategoryLabel(node.category);
+                return {
+                    ...node,
+                    label: String(node.name || node.id || "未命名节点"),
+                    type,
+                    typeLabel: type,
+                    degree: degreeMap[node.id] || 0,
+                    color: graphExplorerCategoryColor(type),
+                };
+            });
+
+            const nodeIds = new Set(nodes.map(function(node) { return String(node.id); }));
+            const links = globalGraphLinks
+                .filter(function(link) {
+                    return nodeIds.has(String(link.source)) && nodeIds.has(String(link.target));
+                })
+                .map(function(link, index) {
+                    const relationType = String(link.label || "关联");
+                    return {
+                        ...link,
+                        id: link.id || `${link.source}__${link.target}__${index}`,
+                        type: relationType,
+                        evidence: relationType,
+                    };
+                });
+
+            return {
+                nodes,
+                links,
+                byId: new Map(nodes.map(function(node) { return [String(node.id), node]; })),
+            };
+        }
+
+        function graphExplorerWidth() {
+            return Math.max(320, Math.round((gxStageEl && gxStageEl.clientWidth) || 900));
+        }
+
+        function graphExplorerHeight() {
+            return Math.max(360, Math.round((gxStageEl && gxStageEl.clientHeight) || 700));
+        }
+
+        function graphExplorerRadius(node) {
+            return Math.max(6, Math.min(24, 6 + Math.sqrt(Number(node.degree || 0)) * 1.85));
+        }
+
+        function updateGraphExplorerStatus(message) {
+            if (gxStatusEl) {
+                gxStatusEl.textContent = message;
+            }
+        }
+
+        function showGraphExplorerEmpty(message) {
+            if (gxEmptyEl) {
+                gxEmptyEl.textContent = message;
+                gxEmptyEl.classList.remove("hidden");
+            }
+            if (gxNodeCountEl) gxNodeCountEl.textContent = "0";
+            if (gxLinkCountEl) gxLinkCountEl.textContent = "0";
+            if (graphExplorerLinkLayer) graphExplorerLinkLayer.selectAll("*").remove();
+            if (graphExplorerNodeLayer) graphExplorerNodeLayer.selectAll("*").remove();
+            if (graphExplorerSimulation) graphExplorerSimulation.stop();
+            updateGraphExplorerStatus(message);
+        }
+
+        function hideGraphExplorerEmpty() {
+            if (gxEmptyEl) {
+                gxEmptyEl.classList.add("hidden");
+            }
+        }
+
+        function showGraphExplorerNode(node) {
+            if (!gxDetailsEl) return;
+            gxDetailsEl.innerHTML = `
+                <div class="graph-explorer-detail-title">${escapeHtml(node.label)}</div>
+                <span class="graph-explorer-pill">${escapeHtml(node.typeLabel)}</span>
+                <span class="graph-explorer-pill">度数 ${Number(node.degree || 0)}</span>
+                <div class="graph-explorer-section">
+                    <h3>节点标识</h3>
+                    <div class="graph-explorer-copy">${escapeHtml(node.id)}</div>
+                </div>
+                <div class="graph-explorer-section">
+                    <h3>节点说明</h3>
+                    <div class="graph-explorer-copy">${escapeHtml(node.desc || "暂无描述")}</div>
+                </div>
+            `;
+        }
+
+        function showGraphExplorerLink(link) {
+            if (!gxDetailsEl || !graphExplorerDataset) return;
+            const source = graphExplorerDataset.byId.get(String(typeof link.source === "object" ? link.source.id : link.source));
+            const target = graphExplorerDataset.byId.get(String(typeof link.target === "object" ? link.target.id : link.target));
+            gxDetailsEl.innerHTML = `
+                <div class="graph-explorer-detail-title">${escapeHtml(source ? source.label : link.source)}</div>
+                <span class="graph-explorer-pill">起点</span>
+                <div class="graph-explorer-section">
+                    <h3>关系类型</h3>
+                    <div class="graph-explorer-copy">${escapeHtml(link.type || link.label || "关联")}</div>
+                </div>
+                <div class="graph-explorer-section">
+                    <h3>终点节点</h3>
+                    <div class="graph-explorer-copy">${escapeHtml(target ? target.label : link.target)}</div>
+                </div>
+                <div class="graph-explorer-section">
+                    <h3>关系说明</h3>
+                    <div class="graph-explorer-copy">${escapeHtml(link.label || link.evidence || "暂无说明")}</div>
+                </div>
+            `;
+        }
+
+        function graphExplorerHighlightNode(node) {
+            if (!graphExplorerNodeLayer || !graphExplorerLinkLayer) return;
+            const neighbors = new Set([String(node.id)]);
+            graphExplorerCurrentLinks.forEach(function(link) {
+                const sourceId = String(typeof link.source === "object" ? link.source.id : link.source);
+                const targetId = String(typeof link.target === "object" ? link.target.id : link.target);
+                if (sourceId === String(node.id)) neighbors.add(targetId);
+                if (targetId === String(node.id)) neighbors.add(sourceId);
+            });
+            graphExplorerNodeLayer.selectAll(".graph-explorer-node")
+                .classed("dim", function(d) { return !neighbors.has(String(d.id)); })
+                .classed("active", function(d) { return String(d.id) === String(node.id); });
+            graphExplorerLinkLayer.selectAll(".graph-explorer-edge")
+                .classed("dim", function(d) {
+                    const sourceId = String(typeof d.source === "object" ? d.source.id : d.source);
+                    const targetId = String(typeof d.target === "object" ? d.target.id : d.target);
+                    return sourceId !== String(node.id) && targetId !== String(node.id);
+                })
+                .classed("active", function(d) {
+                    const sourceId = String(typeof d.source === "object" ? d.source.id : d.source);
+                    const targetId = String(typeof d.target === "object" ? d.target.id : d.target);
+                    return sourceId === String(node.id) || targetId === String(node.id);
+                });
+            updateGraphExplorerStatus(`已聚焦节点“${node.label}”，显示其直接关联知识点。`);
+        }
+
+        function graphExplorerHighlightLink(link) {
+            if (!graphExplorerNodeLayer || !graphExplorerLinkLayer) return;
+            const sourceId = String(typeof link.source === "object" ? link.source.id : link.source);
+            const targetId = String(typeof link.target === "object" ? link.target.id : link.target);
+            graphExplorerNodeLayer.selectAll(".graph-explorer-node")
+                .classed("dim", function(d) { return String(d.id) !== sourceId && String(d.id) !== targetId; })
+                .classed("active", function(d) { return String(d.id) === sourceId || String(d.id) === targetId; });
+            graphExplorerLinkLayer.selectAll(".graph-explorer-edge")
+                .classed("dim", function(d) { return String(d.id) !== String(link.id); })
+                .classed("active", function(d) { return String(d.id) === String(link.id); });
+            updateGraphExplorerStatus(`已聚焦关系“${link.type || link.label || "关联"}”。`);
+        }
+
+        function clearGraphExplorerHighlight() {
+            if (graphExplorerNodeLayer) {
+                graphExplorerNodeLayer.selectAll(".graph-explorer-node").classed("dim", false).classed("active", false);
+            }
+            if (graphExplorerLinkLayer) {
+                graphExplorerLinkLayer.selectAll(".graph-explorer-edge").classed("dim", false).classed("active", false);
+            }
+            updateGraphExplorerStatus("图谱已载入，点击节点或关系查看详情。");
+        }
+
+        function resolveGraphExplorerFocusIds(dataset) {
+            const nodeIds = new Set();
+            const linkIds = new Set();
+            if (!dataset || (!currentHighlightNodes.length && !currentHighlightEdges.length)) {
+                return { nodeIds, linkIds };
+            }
+
+            dataset.nodes.forEach(function(node) {
+                if (currentHighlightNodes.some(function(candidate) { return isStrictMatch(candidate, node.label); })) {
+                    nodeIds.add(String(node.id));
+                }
+            });
+
+            dataset.links.forEach(function(link) {
+                const relationText = String(link.type || link.label || "");
+                const sourceNode = dataset.byId.get(String(link.source));
+                const targetNode = dataset.byId.get(String(link.target));
+                const explicitMatch = currentHighlightEdges.some(function(hint) {
+                    const raw = String(hint.raw || hint.label || "").trim();
+                    if (hint.source && hint.target) {
+                        return (
+                            (isStrictMatch(hint.source, sourceNode ? sourceNode.label : link.source) && isStrictMatch(hint.target, targetNode ? targetNode.label : link.target)) ||
+                            (isStrictMatch(hint.source, targetNode ? targetNode.label : link.target) && isStrictMatch(hint.target, sourceNode ? sourceNode.label : link.source))
+                        );
+                    }
+                    return raw && (isStrictMatch(raw, relationText) || relationText.includes(raw));
+                });
+                if (explicitMatch) {
+                    linkIds.add(String(link.id));
+                    nodeIds.add(String(link.source));
+                    nodeIds.add(String(link.target));
+                }
+            });
+
+            if (nodeIds.size) {
+                dataset.links.forEach(function(link) {
+                    if (nodeIds.has(String(link.source)) || nodeIds.has(String(link.target))) {
+                        nodeIds.add(String(link.source));
+                        nodeIds.add(String(link.target));
+                    }
+                });
+            }
+
+            return { nodeIds, linkIds };
+        }
+
+        function graphExplorerFilteredGraph() {
+            if (!graphExplorerDataset) {
+                return { nodes: [], links: [] };
+            }
+
+            const query = graphExplorerState.query.trim().toLowerCase();
+            const focusIds = resolveGraphExplorerFocusIds(graphExplorerDataset);
+            let nodes = graphExplorerDataset.nodes.filter(function(node) {
+                if (graphExplorerState.mode === "focus" && focusIds.nodeIds.size && !focusIds.nodeIds.has(String(node.id))) {
+                    return false;
+                }
+                if (graphExplorerState.type !== "__all__" && node.type !== graphExplorerState.type) {
+                    return false;
+                }
+                if (Number(node.degree || 0) < graphExplorerState.minDegree) {
+                    return false;
+                }
+                if (query) {
+                    const haystack = `${node.label} ${node.typeLabel} ${node.desc || ""}`.toLowerCase();
+                    if (!haystack.includes(query)) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+
+            nodes = nodes
+                .sort(function(a, b) { return Number(b.degree || 0) - Number(a.degree || 0); })
+                .slice(0, graphExplorerState.limit);
+
+            const nodeIdSet = new Set(nodes.map(function(node) { return String(node.id); }));
+            const links = graphExplorerDataset.links.filter(function(link) {
+                if (!nodeIdSet.has(String(link.source)) || !nodeIdSet.has(String(link.target))) {
+                    return false;
+                }
+                if (graphExplorerState.relation !== "__all__" && String(link.type || "关联") !== graphExplorerState.relation) {
+                    return false;
+                }
+                if (graphExplorerState.mode === "focus" && focusIds.linkIds.size) {
+                    return focusIds.linkIds.has(String(link.id)) || focusIds.nodeIds.has(String(link.source)) || focusIds.nodeIds.has(String(link.target));
+                }
+                return true;
+            });
+
+            return {
+                nodes: nodes.map(function(node) { return { ...node }; }),
+                links: links.map(function(link) { return { ...link }; }),
+            };
+        }
+
+        function syncGraphExplorerControls() {
+            if (gxSearchEl) gxSearchEl.value = graphExplorerState.query;
+            if (gxTypeFilterEl) gxTypeFilterEl.value = graphExplorerState.type;
+            if (gxRelationFilterEl) gxRelationFilterEl.value = graphExplorerState.relation;
+            if (gxLimitEl) gxLimitEl.value = graphExplorerState.limit;
+            if (gxLimitLabelEl) gxLimitLabelEl.textContent = String(graphExplorerState.limit);
+            if (gxDegreeEl) gxDegreeEl.value = graphExplorerState.minDegree;
+            if (gxDegreeLabelEl) gxDegreeLabelEl.textContent = String(graphExplorerState.minDegree);
+        }
+
+        function populateGraphExplorerControls() {
+            if (!graphExplorerDataset) return;
+            const typeCounts = new Map();
+            const relationCounts = new Map();
+
+            graphExplorerDataset.nodes.forEach(function(node) {
+                typeCounts.set(node.type, (typeCounts.get(node.type) || 0) + 1);
+            });
+            graphExplorerDataset.links.forEach(function(link) {
+                relationCounts.set(link.type || "关联", (relationCounts.get(link.type || "关联") || 0) + 1);
+            });
+
+            if (gxTypeFilterEl) {
+                gxTypeFilterEl.innerHTML = '<option value="__all__">全部类型</option>';
+                Array.from(typeCounts.entries())
+                    .sort(function(a, b) { return b[1] - a[1]; })
+                    .forEach(function(entry) {
+                        const option = document.createElement("option");
+                        option.value = entry[0];
+                        option.textContent = `${entry[0]} (${entry[1]})`;
+                        gxTypeFilterEl.appendChild(option);
+                    });
+            }
+
+            if (gxRelationFilterEl) {
+                gxRelationFilterEl.innerHTML = '<option value="__all__">全部关系</option>';
+                Array.from(relationCounts.entries())
+                    .sort(function(a, b) { return b[1] - a[1]; })
+                    .forEach(function(entry) {
+                        const option = document.createElement("option");
+                        option.value = entry[0];
+                        option.textContent = `${entry[0]} (${entry[1]})`;
+                        gxRelationFilterEl.appendChild(option);
+                    });
+            }
+
+            if (gxLegendEl) {
+                gxLegendEl.innerHTML = Array.from(typeCounts.entries())
+                    .sort(function(a, b) { return a[0].localeCompare(b[0], "zh-CN"); })
+                    .map(function(entry) {
+                        return `
+                            <div class="graph-explorer-legend-item">
+                                <span class="graph-explorer-swatch" style="background:${graphExplorerCategoryColor(entry[0])}"></span>
+                                <span>${escapeHtml(entry[0])}</span>
+                                <span>${entry[1]}</span>
+                            </div>
+                        `;
+                    })
+                    .join("");
+            }
+
+            if (gxLimitEl) {
+                const maxLimit = Math.max(60, Math.min(500, Math.max(graphExplorerDataset.nodes.length, 60)));
+                gxLimitEl.max = String(maxLimit);
+                if (graphExplorerState.limit > maxLimit) {
+                    graphExplorerState.limit = maxLimit;
+                }
+            }
+            syncGraphExplorerControls();
+        }
+
+        function renderGraphExplorer() {
+            if (!gxSvgEl || !graphExplorerRootSelection || !graphExplorerLinkLayer || !graphExplorerNodeLayer) {
+                return;
+            }
+            if (!graphExplorerDataset || !graphExplorerDataset.nodes.length) {
+                showGraphExplorerEmpty("图谱数据暂未就绪。");
+                return;
+            }
+
+            const graph = graphExplorerFilteredGraph();
+            graphExplorerCurrentNodes = graph.nodes;
+            graphExplorerCurrentLinks = graph.links;
+
+            if (!graph.nodes.length) {
+                showGraphExplorerEmpty("当前筛选条件下没有匹配的图谱节点。");
+                return;
+            }
+
+            hideGraphExplorerEmpty();
+            if (gxNodeCountEl) gxNodeCountEl.textContent = String(graph.nodes.length);
+            if (gxLinkCountEl) gxLinkCountEl.textContent = String(graph.links.length);
+
+            if (graphExplorerSimulation) {
+                graphExplorerSimulation.stop();
+            }
+
+            const width = graphExplorerWidth();
+            const height = graphExplorerHeight();
+
+            const svg = d3.select(gxSvgEl)
+                .attr("viewBox", `0 0 ${width} ${height}`);
+
+            graphExplorerLinkLayer.selectAll("*").remove();
+            graphExplorerNodeLayer.selectAll("*").remove();
+
+            const links = graphExplorerLinkLayer.selectAll("line")
+                .data(graph.links, function(d) { return d.id; })
+                .join("line")
+                .attr("class", "graph-explorer-edge")
+                .attr("stroke-width", function(d) {
+                    const source = graphExplorerDataset.byId.get(String(d.source));
+                    const target = graphExplorerDataset.byId.get(String(d.target));
+                    return Math.max(0.8, Math.min(3.2, Math.sqrt((Number(source?.degree || 1) + Number(target?.degree || 1))) / 3));
+                })
+                .on("click", function(event, d) {
+                    event.stopPropagation();
+                    showGraphExplorerLink(d);
+                    graphExplorerHighlightLink(d);
+                });
+
+            const nodeGroups = graphExplorerNodeLayer.selectAll("g")
+                .data(graph.nodes, function(d) { return d.id; })
+                .join("g")
+                .attr("class", "graph-explorer-node")
+                .call(
+                    d3.drag()
+                        .on("start", function(event, d) {
+                            if (!event.active) graphExplorerSimulation.alphaTarget(0.25).restart();
+                            d.fx = d.x;
+                            d.fy = d.y;
+                        })
+                        .on("drag", function(event, d) {
+                            d.fx = event.x;
+                            d.fy = event.y;
+                        })
+                        .on("end", function(event, d) {
+                            if (!event.active) graphExplorerSimulation.alphaTarget(0);
+                            d.fx = null;
+                            d.fy = null;
+                        })
+                )
+                .on("click", function(event, d) {
+                    event.stopPropagation();
+                    showGraphExplorerNode(d);
+                    graphExplorerHighlightNode(d);
+                });
+
+            nodeGroups.append("circle")
+                .attr("r", graphExplorerRadius)
+                .attr("fill", function(d) { return d.color; });
+
+            nodeGroups.append("title")
+                .text(function(d) {
+                    return `${d.label}\n${d.typeLabel}\n度数 ${Number(d.degree || 0)}`;
+                });
+
+            const focusIds = resolveGraphExplorerFocusIds(graphExplorerDataset).nodeIds;
+            nodeGroups
+                .filter(function(d) {
+                    return Number(d.degree || 0) >= 8 || focusIds.has(String(d.id));
+                })
+                .append("text")
+                .attr("x", function(d) { return graphExplorerRadius(d) + 5; })
+                .attr("y", 4)
+                .text(function(d) {
+                    return d.label.length > 16 ? `${d.label.slice(0, 16)}...` : d.label;
+                });
+
+            graphExplorerSimulation = d3.forceSimulation(graph.nodes)
+                .force(
+                    "link",
+                    d3.forceLink(graph.links)
+                        .id(function(d) { return d.id; })
+                        .distance(function(d) {
+                            const source = graphExplorerDataset.byId.get(String(typeof d.source === "object" ? d.source.id : d.source));
+                            const target = graphExplorerDataset.byId.get(String(typeof d.target === "object" ? d.target.id : d.target));
+                            return 64 + Math.min(80, Number(source?.degree || 0) + Number(target?.degree || 0));
+                        })
+                )
+                .force("charge", d3.forceManyBody().strength(function(d) { return -110 - graphExplorerRadius(d) * 14; }))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("collide", d3.forceCollide().radius(function(d) { return graphExplorerRadius(d) + 8; }))
+                .alpha(0.95)
+                .on("tick", function() {
+                    links
+                        .attr("x1", function(d) { return d.source.x; })
+                        .attr("y1", function(d) { return d.source.y; })
+                        .attr("x2", function(d) { return d.target.x; })
+                        .attr("y2", function(d) { return d.target.y; });
+                    nodeGroups.attr("transform", function(d) { return `translate(${d.x},${d.y})`; });
+                });
+
+            svg.on("click", function() {
+                clearGraphExplorerHighlight();
+            });
+
+            updateGraphExplorerStatus(
+                graphExplorerState.mode === "focus" && focusIds.size
+                    ? `当前正在展示本轮咨询命中的知识子图，共 ${graph.nodes.length} 个节点。`
+                    : `当前展示 ${graph.nodes.length} 个节点、${graph.links.length} 条关系。`
+            );
+        }
+
+        function initGraphExplorer() {
+            if (graphExplorerInitialized || !gxSvgEl || !window.d3) {
+                return;
+            }
+            const svg = d3.select(gxSvgEl);
+            graphExplorerRootSelection = svg.append("g");
+            graphExplorerLinkLayer = graphExplorerRootSelection.append("g");
+            graphExplorerNodeLayer = graphExplorerRootSelection.append("g");
+            graphExplorerZoom = d3.zoom()
+                .scaleExtent([0.08, 4])
+                .on("zoom", function(event) {
+                    graphExplorerRootSelection.attr("transform", event.transform);
+                });
+            svg.call(graphExplorerZoom);
+
+            if (gxSearchEl) {
+                gxSearchEl.addEventListener("input", function(event) {
+                    graphExplorerState.query = event.target.value.trim();
+                    renderGraphExplorer();
+                });
+            }
+            if (gxTypeFilterEl) {
+                gxTypeFilterEl.addEventListener("change", function(event) {
+                    graphExplorerState.type = event.target.value;
+                    renderGraphExplorer();
+                });
+            }
+            if (gxRelationFilterEl) {
+                gxRelationFilterEl.addEventListener("change", function(event) {
+                    graphExplorerState.relation = event.target.value;
+                    renderGraphExplorer();
+                });
+            }
+            if (gxLimitEl) {
+                gxLimitEl.addEventListener("input", function(event) {
+                    graphExplorerState.limit = Number(event.target.value);
+                    syncGraphExplorerControls();
+                    renderGraphExplorer();
+                });
+            }
+            if (gxDegreeEl) {
+                gxDegreeEl.addEventListener("input", function(event) {
+                    graphExplorerState.minDegree = Number(event.target.value);
+                    syncGraphExplorerControls();
+                    renderGraphExplorer();
+                });
+            }
+            if (gxShowAllBtn) {
+                gxShowAllBtn.addEventListener("click", function() {
+                    graphExplorerState.mode = "all";
+                    renderGraphExplorer();
+                });
+            }
+            if (gxShowFocusBtn) {
+                gxShowFocusBtn.addEventListener("click", function() {
+                    graphExplorerState.mode = "focus";
+                    renderGraphExplorer();
+                });
+            }
+            if (gxResetViewBtn) {
+                gxResetViewBtn.addEventListener("click", function() {
+                    d3.select(gxSvgEl).transition().duration(420).call(graphExplorerZoom.transform, d3.zoomIdentity);
+                    clearGraphExplorerHighlight();
+                });
+            }
+            if (gxCloseBtn) {
+                gxCloseBtn.addEventListener("click", closeGraphExplorer);
+            }
+            graphExplorerEl.addEventListener("click", function(event) {
+                if (event.target === graphExplorerEl) {
+                    closeGraphExplorer();
+                }
+            });
+            graphExplorerInitialized = true;
+        }
+
+        function refreshGraphExplorerData() {
+            graphExplorerDataset = buildGraphExplorerDataset();
+            populateGraphExplorerControls();
+            if (!graphExplorerEl.classList.contains("hidden")) {
+                renderGraphExplorer();
+            }
+        }
+
+        function openGraphExplorer() {
+            initGraphExplorer();
+            graphExplorerEl.classList.remove("hidden");
+            graphExplorerEl.setAttribute("aria-hidden", "false");
+            document.body.style.overflow = "hidden";
+            if (!graphExplorerDataset || !graphExplorerDataset.nodes.length) {
+                refreshGraphExplorerData();
+            }
+            renderGraphExplorer();
+        }
+
+        function closeGraphExplorer() {
+            graphExplorerEl.classList.add("hidden");
+            graphExplorerEl.setAttribute("aria-hidden", "true");
+            document.body.style.overflow = "";
+            if (graphExplorerSimulation) {
+                graphExplorerSimulation.alphaTarget(0);
+            }
+        }
+
+        function focusComposer() {
+            chatInputEl.focus();
+        }
+
+        function useQuickPrompt(text) {
+            chatInputEl.value = text;
+            focusComposer();
+        }
+
+        function buildMessageMarkup(role, text, extraClass = "", options = {}) {
+            const normalizedRole = role === "ai" ? "assistant" : role;
+            const safeHtml = escapeHtml(text).replace(/\n/g, "<br>");
+            const messageId = options.id ? ` id="${options.id}"` : "";
+            const iconHtml = normalizedRole === "user"
+                ? '<i class="fa-regular fa-user"></i>'
+                : '<i class="fa-solid fa-seedling"></i>';
+            return `
+                <div${messageId} class="message-row ${normalizedRole} ${extraClass}">
+                    <div class="message-icon">${iconHtml}</div>
+                    <div class="message-stack">
+                        <div class="message-bubble">${safeHtml}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function appendMessage(role, text, extraClass = "", options = {}) {
+            chatMessagesEl.insertAdjacentHTML("beforeend", buildMessageMarkup(role, text, extraClass, options));
+            chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+        }
+
+        function setMediaState(chipText, badgeText, statusText, modeClass = "") {
+            const modeIcon = modeClass === "active"
+                ? "fa-circle-play"
+                : (modeClass === "audio-only" ? "fa-volume-high" : "fa-wave-square");
+            mediaChip.innerHTML = `<i class="fa-solid ${modeIcon}"></i><span>${escapeHtml(chipText)}</span>`;
+            mediaBadge.textContent = badgeText;
+            mediaStatus.textContent = statusText;
+            videoShell.classList.remove("active", "audio-only");
+            if (modeClass) {
+                videoShell.classList.add(modeClass);
+            }
+        }
+
+        function inferEmotionTone(name) {
+            if (POSITIVE_EMOTIONS.has(name)) return "positive";
+            if (NEGATIVE_EMOTIONS.has(name)) return "negative";
+            return "neutral";
+        }
+
+        function summarizeEmotionState(emotions) {
+            if (!emotions.length || emotions[0].name === "待分析") {
+                return { title: "平稳待分析", icon: "🙂", detail: "等待更多对话线索", tone: "neutral" };
+            }
+
+            const topTone = inferEmotionTone(emotions[0].name);
+            const totalNegative = emotions
+                .filter((item) => inferEmotionTone(item.name) === "negative")
+                .reduce((sum, item) => sum + Number(item.value || 0), 0);
+            const totalPositive = emotions
+                .filter((item) => inferEmotionTone(item.name) === "positive")
+                .reduce((sum, item) => sum + Number(item.value || 0), 0);
+
+            if (topTone === "negative" || totalNegative >= 45) {
+                return { title: "压力偏高", icon: "🫶", detail: `${emotions[0].name} ${formatPercentage(emotions[0].value)}`, tone: "negative" };
+            }
+
+            if (topTone === "positive" || totalPositive >= 45) {
+                return { title: "平稳偏积极", icon: "🙂", detail: `${emotions[0].name} ${formatPercentage(emotions[0].value)}`, tone: "positive" };
+            }
+
+            return { title: "波动可控", icon: "🌿", detail: `${emotions[0].name} ${formatPercentage(emotions[0].value)}`, tone: "neutral" };
+        }
+
+        function buildEmotionInsight(summary) {
+            if (summary.tone === "negative") {
+                return "你的情绪压力正在上升，我们可以继续把困扰拆开，一点点找到更适合你的缓解方式。";
+            }
+            if (summary.tone === "positive") {
+                return "你的情绪状态整体良好，继续保持关注和照顾自己，也可以进一步巩固让你稳定的因素。";
+            }
+            return "你的情绪目前有一定起伏，但整体仍在可调节范围内，我们可以继续一起梳理原因与应对策略。";
+        }
+
+        function renderEmotionLegend(data) {
+            if (!emotionLegendEl) return;
+            emotionLegendEl.innerHTML = data.map(function(item, index) {
+                const palette = EMOTION_COLORS[index % EMOTION_COLORS.length];
+                return `
+                    <span class="emotion-legend-item">
+                        <span class="emotion-legend-dot" style="background:${palette.c1};"></span>
+                        <span>${escapeHtml(item.name)} ${formatPercentage(item.value)}</span>
+                    </span>
+                `;
+            }).join("");
+        }
+
+        function renderVoiceEmotionPreview(emotions) {
+            if (!voiceEmotionPreviewEl) return;
+            if (!Array.isArray(emotions) || !emotions.length) {
+                voiceEmotionPreviewEl.innerHTML = "";
+                return;
+            }
+            voiceEmotionPreviewEl.innerHTML = emotions.slice(0, 4).map(function(item) {
+                const value = Math.max(0, Math.min(100, Number(item.value || 0)));
+                return `
+                    <div class="voice-emotion-row">
+                        <span>${escapeHtml(item.name)}</span>
+                        <span class="voice-emotion-track">
+                            <span class="voice-emotion-fill" style="width:${value.toFixed(1)}%"></span>
+                        </span>
+                        <span>${formatPercentage(value)}</span>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        function updateEmotionPanel(rawEmotions) {
+            const emotions = Array.isArray(rawEmotions) && rawEmotions.length
+                ? rawEmotions
+                    .filter((item) => Number(item.value || 0) > 0)
+                    .map((item) => ({ ...item, value: Number(item.value || 0) }))
+                : [{ name: "待分析", value: 100 }];
+            const total = emotions.reduce((sum, item) => sum + Number(item.value || 0), 0);
+            const displayEmotions = emotions.length
+                ? emotions.map(function(item) {
+                    return {
+                        ...item,
+                        value: total > 0 ? (Number(item.value || 0) / total) * 100 : 0,
+                    };
+                })
+                : [{ name: "待分析", value: 100 }];
+            const summary = summarizeEmotionState(displayEmotions);
+
+            if (emotionChart) {
+                emotionChart.setOption({
+                    series: [{ data: applyEmotionColors(displayEmotions) }],
+                    graphic: [
+                        { id: "center-emoji", style: { text: summary.icon, fill: "#78b691" } },
+                        { id: "center-label", style: { text: "情绪状态" } },
+                        { id: "center-sub", style: { text: summary.title, fill: summary.tone === "negative" ? "#de8f6c" : "#5c9a7a" } },
+                        { id: "center-detail", style: { text: summary.detail } },
+                    ],
+                });
+            }
+
+            renderEmotionLegend(displayEmotions);
+            emotionInsightEl.innerHTML = `<i class="fa-solid fa-seedling"></i><span>${escapeHtml(buildEmotionInsight(summary))}</span>`;
+        }
+
+        function setInputMode(mode) {
+            inputMode = mode === "voice" ? "voice" : "text";
+            textModeBtn.classList.toggle("active", inputMode === "text");
+            voiceModeBtn.classList.toggle("active", inputMode === "voice");
+            voicePanelEl.classList.toggle("active", inputMode === "voice");
+            inputModeLabelEl.textContent = inputMode === "voice" ? "文本 + 语音情绪识别" : "文本情绪识别";
+            chatInputEl.placeholder = inputMode === "voice" ? "录音后会自动填入转写，也可以手动修正..." : "输入你想聊的话题...";
+            if (inputMode === "text") {
+                voiceEmotionResult = null;
+                renderVoiceEmotionPreview([]);
+            }
+        }
+
+        function buildSpeechRecognition() {
+            const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!Recognition) {
+                return null;
+            }
+            const recognition = new Recognition();
+            recognition.lang = "zh-CN";
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.onresult = function(event) {
+                let transcript = "";
+                for (let index = 0; index < event.results.length; index += 1) {
+                    transcript += event.results[index][0].transcript;
+                }
+                if (transcript.trim()) {
+                    chatInputEl.value = transcript.trim();
+                }
+            };
+            recognition.onerror = function(error) {
+                console.warn("浏览器语音转写失败。", error);
+            };
+            recognition.onend = function() {
+                speechRecognitionActive = false;
+            };
+            return recognition;
+        }
+
+        function bestAudioMimeType() {
+            const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/wav"];
+            return candidates.find(function(type) {
+                return window.MediaRecorder && MediaRecorder.isTypeSupported(type);
+            }) || "";
+        }
+
+        async function toggleVoiceRecording() {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+                return;
+            }
+            await startVoiceRecording();
+        }
+
+        async function startVoiceRecording() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+                voiceStatusEl.textContent = "当前浏览器不支持录音，请改用文本输入。";
+                return;
+            }
+
+            setInputMode("voice");
+            voiceEmotionResult = null;
+            renderVoiceEmotionPreview([]);
+            voiceChunks = [];
+
+            try {
+                voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const mimeType = bestAudioMimeType();
+                mediaRecorder = new MediaRecorder(voiceStream, mimeType ? { mimeType } : undefined);
+                mediaRecorder.ondataavailable = function(event) {
+                    if (event.data && event.data.size > 0) {
+                        voiceChunks.push(event.data);
+                    }
+                };
+                mediaRecorder.onstop = handleVoiceRecordingStop;
+                mediaRecorder.start();
+
+                speechRecognition = buildSpeechRecognition();
+                if (speechRecognition) {
+                    try {
+                        speechRecognition.start();
+                        speechRecognitionActive = true;
+                    } catch (error) {
+                        console.warn("语音转写启动失败。", error);
+                    }
+                }
+
+                voiceRecordBtn.classList.add("recording");
+                voiceRecordBtn.innerHTML = '<i class="fa-solid fa-stop"></i>';
+                voiceStatusEl.textContent = speechRecognition ? "正在录音并转写..." : "正在录音，当前浏览器未提供转写。";
+            } catch (error) {
+                console.error("录音启动失败", error);
+                voiceStatusEl.textContent = "无法访问麦克风，请检查浏览器权限或本地端口转发地址。";
+            }
+        }
+
+        async function handleVoiceRecordingStop() {
+            voiceRecordBtn.classList.remove("recording");
+            voiceRecordBtn.innerHTML = '<i class="fa-solid fa-microphone-lines"></i>';
+            if (speechRecognition && speechRecognitionActive) {
+                try { speechRecognition.stop(); } catch (_) {}
+            }
+            if (voiceStream) {
+                voiceStream.getTracks().forEach(function(track) { track.stop(); });
+            }
+
+            const mimeType = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : "audio/webm";
+            const blob = new Blob(voiceChunks, { type: mimeType });
+            if (!blob.size) {
+                voiceStatusEl.textContent = "没有录到有效音频，请重新录制。";
+                return;
+            }
+
+            voiceStatusEl.textContent = "正在识别语音情绪...";
+            const formData = new FormData();
+            const extension = mimeType.includes("mp4") ? "m4a" : (mimeType.includes("wav") ? "wav" : "webm");
+            formData.append("audio", blob, `voice-input.${extension}`);
+
+            try {
+                const response = await fetch("/speech_emotion", {
+                    method: "POST",
+                    body: formData,
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.detail || "语音情绪识别失败");
+                }
+                voiceEmotionResult = data;
+                renderVoiceEmotionPreview(data.emotions || []);
+                const top = Array.isArray(data.emotions) && data.emotions.length ? data.emotions[0] : null;
+                voiceStatusEl.textContent = top
+                    ? `语音情绪：${top.name} ${formatPercentage(top.value)}`
+                    : "语音情绪已识别。";
+            } catch (error) {
+                console.error("语音情绪识别失败", error);
+                voiceStatusEl.textContent = `语音情绪识别失败：${error.message}`;
+            }
+        }
+
+        function updateGraphMeta() {
+            if (graphCountEl) {
+                graphCountEl.textContent = `已关联 ${globalGraphNodes.length} 个知识点`;
+            }
+        }
+
+        function renderGraphEmpty(message = "输入咨询内容后，我会在这里梳理相关的心理知识结构。") {
+            graphLastRenderMode = "empty";
+            graphActivePayload = null;
+            graphDragState = null;
+            graphNodePositions = {};
+            graphChartEl.innerHTML = `
+                <div class="flex h-full items-center justify-center rounded-[26px] border border-[#edf2ed] bg-[rgba(247,250,247,0.88)] px-8 text-center">
+                    <div>
+                        <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#edf6f0] text-2xl text-[#7eb795]">
+                            <i class="fa-solid fa-sitemap"></i>
+                        </div>
+                        <div class="text-[1.06rem] font-semibold text-[#7f8d83] leading-8">${escapeHtml(message)}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function hidePlaybackOverlay() {
+            playbackOverlayEl.classList.add("hidden");
+            playbackOverlayEl.classList.remove("flex");
+            pendingPlaybackType = null;
+        }
+
+        function showPlaybackOverlay(kind) {
+            pendingPlaybackType = kind;
+            playbackOverlayEl.querySelector("span").textContent =
+                kind === "audio"
+                    ? "浏览器拦截了自动播报，点击播放语音"
+                    : (kind === "video-audio"
+                        ? "点击开启数字人声音"
+                        : "点击继续播放数字人视频");
+            playbackOverlayEl.classList.remove("hidden");
+            playbackOverlayEl.classList.add("flex");
+        }
+
+        function showAvatarFallback() {
+            avatarImageEl.classList.remove("hidden");
+            videoEl.classList.add("hidden");
+        }
+
+        function showVideoLayer() {
+            avatarImageEl.classList.add("hidden");
+            videoEl.classList.remove("hidden");
+        }
+
+        async function unlockMediaPlayback() {
+            if (mediaPlaybackUnlocked) {
+                return true;
+            }
+
+            try {
+                audioEl.pause();
+                audioEl.src = SILENT_AUDIO_DATA_URI;
+                audioEl.currentTime = 0;
+                audioEl.volume = 1;
+                audioEl.muted = false;
+                await audioEl.play();
+                audioEl.pause();
+                audioEl.currentTime = 0;
+                audioEl.removeAttribute("src");
+                audioEl.load();
+                mediaPlaybackUnlocked = true;
+                return true;
+            } catch (error) {
+                console.warn("用户手势媒体解锁失败，后续可能仍会受到浏览器自动播放策略限制。", error);
+                audioEl.pause();
+                audioEl.removeAttribute("src");
+                audioEl.load();
+                return false;
+            }
+        }
+
+        function stopCurrentPlayback() {
+            videoEl.pause();
+            audioEl.pause();
+            videoEl.onended = null;
+            audioEl.onended = null;
+            videoEl.onerror = null;
+            audioEl.onerror = null;
+            videoEl.removeEventListener("loadeddata", hidePlaybackOverlay);
+            hidePlaybackOverlay();
+        }
+
+        function resetVideoToAvatar() {
+            videoEl.pause();
+            videoEl.removeAttribute("src");
+            videoEl.load();
+            audioEl.pause();
+            audioEl.removeAttribute("src");
+            audioEl.load();
+            showAvatarFallback();
+        }
+
+        async function tryPlayAudioTrack(audioUrl) {
+            if (!audioUrl) {
+                return { started: false, hasSource: false };
+            }
+
+            audioEl.src = audioUrl;
+            audioEl.load();
+            audioEl.currentTime = 0;
+            audioEl.volume = 1;
+            audioEl.muted = false;
+            try {
+                await audioEl.play();
+                return { started: true, hasSource: true };
+            } catch (error) {
+                console.warn("音频自动播放失败，可能是浏览器策略所致。", error);
+                return { started: false, hasSource: true };
+            }
+        }
+
+        async function playAssistantMedia(payload) {
+            stopCurrentPlayback();
+            subtitleEl.textContent = payload.speech_text || payload.reply || "暂无播报内容。";
+
+            if (!payload.media_url) {
+                videoEl.removeAttribute("src");
+                videoEl.load();
+                showAvatarFallback();
+                setMediaState("文本模式", "仅文本", "未生成媒体");
+                return;
+            }
+
+            if (payload.media_type === "video") {
+                showVideoLayer();
+                videoEl.src = payload.media_url;
+                videoEl.load();
+                setMediaState("口型同步中", "视频驱动", payload.media_status || "数字人口型驱动", "active");
+                videoEl.onerror = () => {
+                    resetVideoToAvatar();
+                    setMediaState("视频异常", "回退头像", "视频资源加载失败，已保留头像展示");
+                };
+
+                let videoStarted = false;
+                let audioState = { started: false, hasSource: Boolean(payload.audio_url) };
+
+                if (mediaPlaybackUnlocked) {
+                    videoStarted = await tryPlayVideoWhenReady(false);
+                    if (videoStarted) {
+                        audioState = { started: true, hasSource: true };
+                    }
+                }
+
+                if (!videoStarted) {
+                    const [fallbackVideoStarted, fallbackAudioState] = await Promise.all([
+                        tryPlayVideoWhenReady(true),
+                        tryPlayAudioTrack(payload.audio_url),
+                    ]);
+                    videoStarted = fallbackVideoStarted;
+                    audioState = fallbackAudioState;
+                }
+
+                if (!videoStarted) {
+                    setMediaState("等待播放", "手动播放", "自动播放被浏览器限制，点击后继续播放", "active");
+                    showPlaybackOverlay("video");
+                } else if (audioState.hasSource && !audioState.started) {
+                    setMediaState("播放中", "视频驱动", `${payload.media_status || "数字人口型驱动"}（点击可开启声音）`, "active");
+                    showPlaybackOverlay("video-audio");
+                }
+
+                videoEl.onplay = () => {
+                    hidePlaybackOverlay();
+                    const audioPlaying = !videoEl.muted || (!!audioEl.src && !audioEl.paused);
+                    setMediaState(
+                        "播放中",
+                        "视频驱动",
+                        audioPlaying
+                            ? `${payload.media_status || "数字人口型驱动"}（有声播放）`
+                            : `${payload.media_status || "数字人口型驱动"}（无声，可点击开启声音）`,
+                        "active"
+                    );
+                };
+                videoEl.onended = () => {
+                    resetVideoToAvatar();
+                    setMediaState("播放完成", "待机中", "视频播放结束，已恢复顾问头像");
+                };
+                audioEl.onended = () => {
+                    if (videoEl.muted && !videoEl.paused && !videoEl.ended) {
+                        videoEl.pause();
+                    }
+                };
+                return;
+            }
+
+            videoEl.removeAttribute("src");
+            videoEl.load();
+            showAvatarFallback();
+            audioEl.src = payload.media_url;
+            audioEl.load();
+            setMediaState("语音播报中", "音频驱动", payload.media_status || "语音模式", "audio-only");
+            try {
+                await audioEl.play();
+            } catch (error) {
+                console.warn("音频自动播放失败，已切换为手动播放。", error);
+                setMediaState("等待播放", "手动播放", "请点击画面中央开始播放语音", "audio-only");
+                showPlaybackOverlay("audio");
+            }
+            audioEl.onplay = () => {
+                hidePlaybackOverlay();
+                setMediaState("播放中", "音频驱动", payload.media_status || "语音模式", "audio-only");
+            };
+            audioEl.onended = () => setMediaState("播放完成", "待机中", "音频播放结束");
+        }
+
+        playbackOverlayEl.addEventListener("click", async () => {
+            try {
+                if (pendingPlaybackType === "audio") {
+                    await audioEl.play();
+                } else if (pendingPlaybackType === "video") {
+                    const videoStarted = await tryPlayVideoWhenReady(false);
+                    if (!videoStarted) {
+                        await tryPlayVideoWhenReady(true);
+                    }
+                    if (videoEl.muted && audioEl.src) {
+                        try {
+                            audioEl.currentTime = videoEl.currentTime || 0;
+                            audioEl.muted = false;
+                            await audioEl.play();
+                        } catch (error) {
+                            console.warn("点击后音频仍未能播放。", error);
+                        }
+                    }
+                } else if (pendingPlaybackType === "video-audio") {
+                    if (audioEl.src) {
+                        audioEl.currentTime = videoEl.currentTime || 0;
+                        audioEl.muted = false;
+                        await audioEl.play();
+                    }
+                    hidePlaybackOverlay();
+                    setMediaState("播放中", "视频驱动", "数字人口型驱动（有声播放）", "active");
+                }
+            } catch (error) {
+                console.warn("手动播放仍然失败。", error);
+            }
+        });
+
+        showAvatarFallback();
+
+        function buildEdgeVisualKey(link) {
+            return `${normalizeText(link.source)}__${normalizeText(link.target)}__${normalizeText(link.label)}`;
+        }
+
+        const CATEGORY_META = {
+            "情绪症状": { short: "情绪", color: "#f2a685", soft: "#ffe1d4", glow: "rgba(242,166,133,0.28)" },
+            "诱发因素": { short: "诱因", color: "#8ab9e6", soft: "#dcecff", glow: "rgba(138,185,230,0.24)" },
+            "疏导举措": { short: "疏导", color: "#7cc59a", soft: "#daf2e4", glow: "rgba(124,197,154,0.28)" },
+            "核心情感": { short: "情感", color: "#9dc8b2", soft: "#e6f5ed", glow: "rgba(157,200,178,0.22)" },
+            "方法技巧": { short: "方法", color: "#94bddc", soft: "#e2eef9", glow: "rgba(148,189,220,0.22)" },
+            "情绪反应": { short: "反应", color: "#d8b5a0", soft: "#f7e7df", glow: "rgba(216,181,160,0.22)" },
+            "Concept": { short: "概念", color: "#a7b1aa", soft: "#edf1ee", glow: "rgba(167,177,170,0.18)" },
+        };
+
+        function getCategoryMeta(node) {
+            const cat = normalizeGraphCategoryLabel(node.category);
+            for (const [key, meta] of Object.entries(CATEGORY_META)) {
+                if (cat.includes(key)) {
+                    return { key, ...meta };
+                }
+            }
+            return { key: "Concept", ...CATEGORY_META["Concept"] };
+        }
+
+        const GRAPH_ROLE_META = {
+            core: {
+                key: "core",
+                color: "#7cc59a",
+                soft: "#e2f4e8",
+                line: "#b9dcc7",
+                glow: "rgba(124,197,154,0.28)",
+                text: "#587569",
+            },
+            related: {
+                key: "related",
+                color: "#99bfe9",
+                soft: "#e7f1fd",
+                line: "#c8daf0",
+                glow: "rgba(153,191,233,0.24)",
+                text: "#607285",
+            },
+            strategy: {
+                key: "strategy",
+                color: "#f3a97f",
+                soft: "#fbeadf",
+                line: "#efd3c0",
+                glow: "rgba(243,169,127,0.24)",
+                text: "#806a5d",
+            },
+        };
+
+        const GRAPH_STRATEGY_KEYWORDS = [
+            "疏导", "方法", "治疗", "调节", "练习", "技巧", "建议", "策略",
+            "支持", "关怀", "呼吸", "冥想", "放松", "运动", "睡眠改善",
+            "正念", "倾诉", "咨询", "稳定", "缓解", "陪伴", "自我照顾"
+        ];
+
+        function containsGraphKeyword(text, keywords) {
+            return keywords.some((keyword) => text.includes(keyword));
+        }
+
+        function getGraphRoleMeta(node, focusGraph) {
+            if (String(node.id) === String(focusGraph.centerNode.id)) {
+                return GRAPH_ROLE_META.core;
+            }
+            const roleText = `${String(node.name || "")} ${String(node.category || "")} ${String(node.desc || "")}`;
+            if (containsGraphKeyword(roleText, GRAPH_STRATEGY_KEYWORDS)) {
+                return GRAPH_ROLE_META.strategy;
+            }
+            return GRAPH_ROLE_META.related;
+        }
+
+        function primeVideoElement(shouldMute = true) {
+            videoEl.autoplay = true;
+            videoEl.playsInline = true;
+            videoEl.setAttribute("autoplay", "autoplay");
+            videoEl.setAttribute("playsinline", "playsinline");
+            videoEl.setAttribute("webkit-playsinline", "true");
+            videoEl.defaultMuted = !!shouldMute;
+            videoEl.muted = !!shouldMute;
+            videoEl.volume = 1;
+            if (shouldMute) {
+                videoEl.setAttribute("muted", "muted");
+            } else {
+                videoEl.removeAttribute("muted");
+            }
+        }
+
+        async function tryPlayVideoWhenReady(shouldMute = true) {
+            primeVideoElement(shouldMute);
+            try {
+                await videoEl.play();
+                return true;
+            } catch (_) {
+                // Retry once after enough media data is available.
+            }
+
+            await new Promise(function(resolve) {
+                if (videoEl.readyState >= 3) {
+                    resolve(null);
+                    return;
+                }
+                const onReady = function() {
+                    videoEl.removeEventListener("loadeddata", onReady);
+                    videoEl.removeEventListener("canplay", onReady);
+                    resolve(null);
+                };
+                videoEl.addEventListener("loadeddata", onReady, { once: true });
+                videoEl.addEventListener("canplay", onReady, { once: true });
+                setTimeout(onReady, 1200);
+            });
+
+            try {
+                primeVideoElement(shouldMute);
+                await videoEl.play();
+                return true;
+            } catch (error) {
+                console.warn("视频自动播放失败，可能是浏览器策略所致。", error);
+                return false;
+            }
+        }
+
+        function resolveGraphHighlights(highlightNodes = [], highlightEdges = []) {
+            const directNodeIds = new Set();
+            const visibleNodeIds = new Set();
+            const explicitEdgeIds = new Set();
+            const contextualEdgeIds = new Set();
+
+            globalGraphNodes.forEach((node) => {
+                if (highlightNodes.some((candidate) => isStrictMatch(candidate, node.name))) {
+                    directNodeIds.add(node.id);
+                    visibleNodeIds.add(node.id);
+                }
+            });
+
+            const edgeMatchesHint = (link, hint) => {
+                if (!hint) return false;
+
+                if (hint.source && hint.target) {
+                    const sourceMatch = isStrictMatch(hint.source, link.source);
+                    const targetMatch = isStrictMatch(hint.target, link.target);
+                    const reverseSourceMatch = isStrictMatch(hint.source, link.target);
+                    const reverseTargetMatch = isStrictMatch(hint.target, link.source);
+                    return (sourceMatch && targetMatch) || (reverseSourceMatch && reverseTargetMatch);
+                }
+
+                const raw = hint.label || hint.raw;
+                if (!raw) return false;
+                const normalizedRaw = normalizeText(raw);
+                const label = normalizeText(link.label);
+                const source = normalizeText(link.source);
+                const target = normalizeText(link.target);
+                return label.includes(normalizedRaw) || `${source}${target}`.includes(normalizedRaw) || `${target}${source}`.includes(normalizedRaw);
+            };
+
+            globalGraphLinks.forEach((link) => {
+                const explicitHit = highlightEdges.some((hint) => edgeMatchesHint(link, hint));
+                if (explicitHit) {
+                    explicitEdgeIds.add(link.id);
+                    visibleNodeIds.add(link.source);
+                    visibleNodeIds.add(link.target);
+                } else if (directNodeIds.has(link.source) && directNodeIds.has(link.target)) {
+                    contextualEdgeIds.add(link.id);
+                }
+            });
+
+            return { directNodeIds, visibleNodeIds, explicitEdgeIds, contextualEdgeIds };
+        }
+
+        function computeNodeDegrees() {
+            const degrees = {};
+            globalGraphLinks.forEach(function(link) {
+                const s = link.source, t = link.target;
+                degrees[s] = (degrees[s] || 0) + 1;
+                degrees[t] = (degrees[t] || 0) + 1;
+            });
+            return degrees;
+        }
+
+        function sortNodeIdsByDegree(degrees) {
+            return Object.keys(degrees).sort(function(a, b) {
+                if ((degrees[b] || 0) !== (degrees[a] || 0)) {
+                    return (degrees[b] || 0) - (degrees[a] || 0);
+                }
+                return String(a).localeCompare(String(b), "zh-CN");
+            });
+        }
+
+        function pickOverviewGraph() {
+            const degrees = computeNodeDegrees();
+            const sortedIds = sortNodeIdsByDegree(degrees);
+            const selectedNodeIds = new Set(sortedIds.slice(0, GRAPH_OVERVIEW_NODE_LIMIT));
+
+            if (selectedNodeIds.size === 0) {
+                globalGraphNodes.slice(0, GRAPH_OVERVIEW_NODE_LIMIT).forEach(function(node) {
+                    selectedNodeIds.add(node.id);
+                });
+            }
+
+            const selectedLinks = [];
+            globalGraphLinks.forEach(function(link) {
+                if (selectedLinks.length >= GRAPH_OVERVIEW_EDGE_LIMIT) {
+                    return;
+                }
+                if (selectedNodeIds.has(link.source) && selectedNodeIds.has(link.target)) {
+                    selectedLinks.push(link);
+                }
+            });
+
+            const selectedNodes = globalGraphNodes.filter(function(node) {
+                return selectedNodeIds.has(node.id);
+            });
+
+            return { nodes: selectedNodes, links: selectedLinks };
+        }
+
+        function pickFocusedGraph(directNodeIds, explicitEdgeIds, contextualEdgeIds) {
+            const selectedNodeIds = new Set(directNodeIds);
+            const selectedLinks = [];
+
+            globalGraphLinks.forEach(function(link) {
+                if (explicitEdgeIds.has(link.id) || contextualEdgeIds.has(link.id)) {
+                    if (selectedLinks.length < GRAPH_FOCUS_EDGE_LIMIT) {
+                        selectedLinks.push(link);
+                    }
+                    selectedNodeIds.add(link.source);
+                    selectedNodeIds.add(link.target);
+                }
+            });
+
+            if (selectedNodeIds.size === 0 && selectedLinks.length === 0) {
+                return { nodes: [], links: [] };
+            }
+
+            for (const link of globalGraphLinks) {
+                if (selectedLinks.length >= GRAPH_FOCUS_EDGE_LIMIT || selectedNodeIds.size >= GRAPH_FOCUS_NODE_LIMIT) {
+                    break;
+                }
+                const touchesFocus = selectedNodeIds.has(link.source) || selectedNodeIds.has(link.target);
+                if (!touchesFocus) {
+                    continue;
+                }
+                if (!selectedLinks.some(function(item) { return item.id === link.id; })) {
+                    selectedLinks.push(link);
+                }
+                selectedNodeIds.add(link.source);
+                selectedNodeIds.add(link.target);
+            }
+
+            const selectedNodes = globalGraphNodes.filter(function(node) {
+                return selectedNodeIds.has(node.id);
+            });
+
+            return { nodes: selectedNodes, links: selectedLinks };
+        }
+
+        function getGraphStageSize() {
+            const rect = graphChartEl.getBoundingClientRect();
+            return {
+                width: Math.max(320, Math.round(rect.width || graphChartEl.clientWidth || 320)),
+                height: Math.max(260, Math.round(rect.height || graphChartEl.clientHeight || 260)),
+            };
+        }
+
+        function clamp(value, min, max) {
+            return Math.max(min, Math.min(max, value));
+        }
+
+        function buildGraphRenderKey(activeGraph, usingOverview) {
+            return [
+                usingOverview ? "overview" : "focus",
+                activeGraph.nodes.map(function(node) { return node.id; }).join("|"),
+                activeGraph.links.map(function(link) { return link.id; }).join("|"),
+            ].join("::");
+        }
+
+        function measureLabelWidth(text, fontSize) {
+            const content = String(text || "");
+            let total = 18;
+            for (const char of content) {
+                total += /[\u4e00-\u9fff]/.test(char) ? fontSize : fontSize * 0.62;
+            }
+            return Math.max(42, Math.round(total));
+        }
+
+        function measureCapsuleMetrics(node) {
+            const fontSize = Number(node.labelSize || 10);
+            const textWidth = measureLabelWidth(node.name, fontSize);
+            const horizontalPadding = node.renderStyle === "core" ? 28 : 22;
+            const height = node.renderStyle === "core" ? 44 : 36;
+            return {
+                width: Math.max(node.renderStyle === "core" ? 92 : 82, textWidth + horizontalPadding),
+                height,
+            };
+        }
+
+        function getPointerPoint(event) {
+            const svg = graphChartEl.querySelector("svg");
+            if (!svg) {
+                return null;
+            }
+            const rect = svg.getBoundingClientRect();
+            const viewBox = svg.viewBox.baseVal;
+            const scaleX = viewBox.width / rect.width;
+            const scaleY = viewBox.height / rect.height;
+            return {
+                x: (event.clientX - rect.left) * scaleX,
+                y: (event.clientY - rect.top) * scaleY,
+                width: viewBox.width,
+                height: viewBox.height,
+            };
+        }
+
+        function computeSvgPositions(nodes, directNodeIds, degrees, usingOverview) {
+            const size = getGraphStageSize();
+            const width = size.width;
+            const height = size.height;
+            const cx = width / 2;
+            const cy = height / 2;
+            const minSide = Math.min(width, height);
+            const positions = {};
+            const focused = nodes.filter(function(node) { return directNodeIds.has(node.id); });
+            const others = nodes.filter(function(node) { return !directNodeIds.has(node.id); });
+
+            if (focused.length === 1) {
+                positions[focused[0].id] = { x: cx, y: cy };
+            } else if (focused.length > 1) {
+                const focusRadius = Math.max(28, minSide * 0.12);
+                focused.forEach(function(node, index) {
+                    const angle = (-Math.PI / 2) + (Math.PI * 2 * index / focused.length);
+                    positions[node.id] = {
+                        x: cx + Math.cos(angle) * focusRadius,
+                        y: cy + Math.sin(angle) * focusRadius,
+                    };
+                });
+            }
+
+            others.sort(function(a, b) {
+                const degreeGap = (degrees[b.id] || 0) - (degrees[a.id] || 0);
+                if (degreeGap !== 0) {
+                    return degreeGap;
+                }
+                return String(a.name).localeCompare(String(b.name), "zh-CN");
+            });
+
+            const ringRadii = usingOverview
+                ? [minSide * 0.18, minSide * 0.31, minSide * 0.42]
+                : [minSide * 0.22, minSide * 0.36, minSide * 0.48];
+            const ringCaps = usingOverview ? [10, 18, 26] : [8, 12, 18];
+            let cursor = 0;
+
+            ringRadii.forEach(function(radius, ringIndex) {
+                if (cursor >= others.length) {
+                    return;
+                }
+                const remaining = others.length - cursor;
+                const count = ringIndex === ringRadii.length - 1 ? remaining : Math.min(ringCaps[ringIndex], remaining);
+                for (let i = 0; i < count; i += 1) {
+                    const node = others[cursor + i];
+                    const angle = (-Math.PI / 2) + (Math.PI * 2 * i / count) + (ringIndex % 2 === 0 ? 0 : Math.PI / count);
+                    positions[node.id] = {
+                        x: cx + Math.cos(angle) * radius,
+                        y: cy + Math.sin(angle) * radius,
+                    };
+                }
+                cursor += count;
+            });
+
+            return { positions, width, height };
+        }
+
+        function renderSvgGraph(activeGraph, renderNodes, renderLinks, directNodeIds, degrees, usingOverview) {
+            const renderKey = buildGraphRenderKey(activeGraph, usingOverview);
+            const layout = computeSvgPositions(activeGraph.nodes, directNodeIds, degrees, usingOverview);
+            if (graphActiveRenderKey !== renderKey) {
+                graphNodePositions = { ...layout.positions };
+                graphActiveRenderKey = renderKey;
+            } else {
+                graphNodePositions = { ...layout.positions, ...graphNodePositions };
+            }
+            const positions = graphNodePositions;
+            const width = layout.width;
+            const height = layout.height;
+
+            const defsSvg = Object.entries(CATEGORY_META).map(function(entry) {
+                const key = entry[0];
+                const meta = entry[1];
+                const safeKey = normalizeText(key || meta.short || "other") || "other";
+                return `
+                    <linearGradient id="graph-gradient-${safeKey}" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="${meta.soft}" />
+                        <stop offset="100%" stop-color="${meta.color}" />
+                    </linearGradient>
+                    <filter id="graph-shadow-${safeKey}" x="-60%" y="-60%" width="220%" height="220%">
+                        <feDropShadow dx="0" dy="8" stdDeviation="9" flood-color="${meta.glow}" flood-opacity="1" />
+                    </filter>
+                `;
+            }).join("");
+
+            const edgeSvg = renderLinks.map(function(link) {
+                const source = positions[link.source];
+                const target = positions[link.target];
+                if (!source || !target) {
+                    return "";
+                }
+                return `
+                    <g class="graph-edge">
+                        <line x1="${source.x.toFixed(1)}" y1="${source.y.toFixed(1)}" x2="${target.x.toFixed(1)}" y2="${target.y.toFixed(1)}"
+                            stroke="${link.lineColor}" stroke-width="${link.lineWidth}" stroke-opacity="${link.lineOpacity}" stroke-linecap="round" />
+                        <title>${escapeHtml(link.source)} → ${escapeHtml(link.target)}${link.label ? ` (${escapeHtml(link.label)})` : ""}</title>
+                    </g>
+                `;
+            }).join("");
+
+            const nodeSvg = renderNodes.map(function(node) {
+                const point = positions[node.id];
+                if (!point) {
+                    return "";
+                }
+                const radius = Number(node.symbolSize || 10) / 2;
+                const label = node.label && node.label.show ? escapeHtml(node.name) : "";
+                const safeCategory = node.gradientKey || "unknown";
+                const isCapsule = node.renderStyle === "capsule";
+                const isCore = node.renderStyle === "core";
+                const capsule = label && isCapsule ? measureCapsuleMetrics(node) : null;
+                const capsuleX = capsule ? point.x - capsule.width / 2 : 0;
+                const capsuleY = capsule ? point.y - capsule.height / 2 : 0;
+                return `
+                    <g class="graph-node" data-node-id="${encodeURIComponent(node.id)}" style="cursor: grab;">
+                        ${isCapsule ? `
+                            <rect
+                                x="${capsuleX.toFixed(1)}"
+                                y="${capsuleY.toFixed(1)}"
+                                width="${capsule.width.toFixed(1)}"
+                                height="${capsule.height.toFixed(1)}"
+                                rx="${(capsule.height / 2).toFixed(1)}"
+                                ry="${(capsule.height / 2).toFixed(1)}"
+                                fill="${node.haloColor}"
+                                fill-opacity="${Math.min(0.18, node.haloOpacity + 0.03)}"
+                            />
+                            <rect
+                                x="${capsuleX.toFixed(1)}"
+                                y="${capsuleY.toFixed(1)}"
+                                width="${capsule.width.toFixed(1)}"
+                                height="${capsule.height.toFixed(1)}"
+                                rx="${(capsule.height / 2).toFixed(1)}"
+                                ry="${(capsule.height / 2).toFixed(1)}"
+                                fill="${node.labelBg}"
+                                stroke="${node.labelBorder}"
+                                stroke-width="${isCore ? 1.4 : 1}"
+                                filter="url(#graph-shadow-${safeCategory})"
+                            />
+                            <rect
+                                x="${(capsuleX + 1).toFixed(1)}"
+                                y="${(capsuleY + 1).toFixed(1)}"
+                                width="${(capsule.width - 2).toFixed(1)}"
+                                height="${((capsule.height / 2) - 2).toFixed(1)}"
+                                rx="${((capsule.height / 2) - 2).toFixed(1)}"
+                                ry="${((capsule.height / 2) - 2).toFixed(1)}"
+                                fill="rgba(255,255,255,0.5)"
+                            />
+                            <text
+                                x="${point.x.toFixed(1)}"
+                                y="${(point.y + 5).toFixed(1)}"
+                                text-anchor="middle"
+                                fill="${node.labelColor}"
+                                font-size="${node.labelSize}"
+                                font-weight="${node.labelWeight}"
+                            >${label}</text>
+                        ` : `
+                            <circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="${(radius + 6).toFixed(1)}"
+                                fill="${node.haloColor}" fill-opacity="${node.haloOpacity}" />
+                            <circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="${radius.toFixed(1)}"
+                                fill="url(#graph-gradient-${safeCategory})" fill-opacity="${node.fillOpacity}"
+                                stroke="${node.strokeColor}" stroke-width="${node.strokeWidth}" filter="url(#graph-shadow-${safeCategory})" />
+                            <circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="${Math.max(2, radius - 4).toFixed(1)}"
+                                fill="${node.centerColor}" fill-opacity="${node.centerOpacity}" />
+                        `}
+                        ${isCore && label ? `
+                            <text
+                                x="${point.x.toFixed(1)}"
+                                y="${(point.y + 4).toFixed(1)}"
+                                text-anchor="middle"
+                                fill="${node.labelColor}"
+                                font-size="${node.labelSize}"
+                                font-weight="${node.labelWeight}"
+                            >${label}</text>
+                        ` : ""}
+                        ${isCapsule ? `
+                            <circle
+                                cx="${point.x.toFixed(1)}"
+                                cy="${point.y.toFixed(1)}"
+                                r="3.4"
+                                fill="${node.fillColor}"
+                                fill-opacity="0.95"
+                                stroke="rgba(255,255,255,0.95)"
+                                stroke-width="1"
+                            />
+                        ` : ""}
+                        <title>${escapeHtml(node.name)}${node.category ? ` - ${escapeHtml(node.category)}` : ""}${node.desc ? ` - ${escapeHtml(node.desc)}` : ""}</title>
+                    </g>
+                `;
+            }).join("");
+
+            graphChartEl.innerHTML = `
+                <svg viewBox="0 0 ${width} ${height}" width="100%" height="100%" role="img" aria-label="知识图谱">
+                    <defs>${defsSvg}</defs>
+                    <rect x="0" y="0" width="${width}" height="${height}" rx="24" fill="rgba(247,250,247,0.96)" stroke="rgba(223,231,224,0.92)"></rect>
+                    <g opacity="0.14">
+                        <circle cx="${(width * 0.18).toFixed(1)}" cy="${(height * 0.2).toFixed(1)}" r="${Math.max(40, width * 0.1).toFixed(1)}" fill="#cfe6d8"></circle>
+                        <circle cx="${(width * 0.8).toFixed(1)}" cy="${(height * 0.24).toFixed(1)}" r="${Math.max(44, width * 0.12).toFixed(1)}" fill="#f8d8c8"></circle>
+                    </g>
+                    ${edgeSvg}
+                    ${nodeSvg}
+                </svg>
+            `;
+
+            graphActivePayload = {
+                activeGraph,
+                renderNodes,
+                renderLinks,
+                directNodeIds: new Set(directNodeIds),
+                degrees,
+                usingOverview,
+            };
+            attachGraphDragHandlers();
+        }
+
+        function attachGraphDragHandlers() {
+            const svg = graphChartEl.querySelector("svg");
+            if (!svg) {
+                return;
+            }
+            svg.querySelectorAll(".graph-node").forEach(function(nodeGroup) {
+                nodeGroup.addEventListener("pointerdown", function(event) {
+                    const nodeId = decodeURIComponent(nodeGroup.dataset.nodeId || "");
+                    const point = getPointerPoint(event);
+                    const position = graphNodePositions[nodeId];
+                    if (!nodeId || !point || !position) {
+                        return;
+                    }
+                    graphDragState = {
+                        nodeId,
+                        offsetX: point.x - position.x,
+                        offsetY: point.y - position.y,
+                    };
+                    nodeGroup.style.cursor = "grabbing";
+                    event.preventDefault();
+                });
+            });
+        }
+
+        window.addEventListener("pointermove", function(event) {
+            if (!graphDragState || !graphActivePayload) {
+                return;
+            }
+            const point = getPointerPoint(event);
+            if (!point) {
+                return;
+            }
+            graphNodePositions[graphDragState.nodeId] = {
+                x: clamp(point.x - graphDragState.offsetX, 24, point.width - 24),
+                y: clamp(point.y - graphDragState.offsetY, 24, point.height - 24),
+            };
+            renderSvgGraph(
+                graphActivePayload.activeGraph,
+                graphActivePayload.renderNodes,
+                graphActivePayload.renderLinks,
+                graphActivePayload.directNodeIds,
+                graphActivePayload.degrees,
+                graphActivePayload.usingOverview
+            );
+        });
+
+        window.addEventListener("pointerup", function() {
+            graphDragState = null;
+            graphChartEl.querySelectorAll(".graph-node").forEach(function(nodeGroup) {
+                nodeGroup.style.cursor = "grab";
+            });
+        });
+
+        window.addEventListener("pointercancel", function() {
+            graphDragState = null;
+        });
+
+        function getNodeById(nodeId) {
+            return globalGraphNodes.find(function(node) {
+                return String(node.id) === String(nodeId);
+            }) || null;
+        }
+
+        function getLinkBetweenNodes(leftId, rightId) {
+            return globalGraphLinks.find(function(link) {
+                return (
+                    (String(link.source) === String(leftId) && String(link.target) === String(rightId)) ||
+                    (String(link.source) === String(rightId) && String(link.target) === String(leftId))
+                );
+            }) || null;
+        }
+
+        function pickCapsuleCenterNode(directNodeIds, explicitEdgeIds, contextualEdgeIds) {
+            const scored = globalGraphNodes
+                .filter(function(node) { return directNodeIds.has(node.id); })
+                .map(function(node) {
+                    let score = 100;
+                    globalGraphLinks.forEach(function(link) {
+                        const touchesNode = String(link.source) === String(node.id) || String(link.target) === String(node.id);
+                        if (!touchesNode) return;
+                        if (explicitEdgeIds.has(link.id)) {
+                            score += 30;
+                        } else if (contextualEdgeIds.has(link.id)) {
+                            score += 12;
+                        }
+                    });
+                    return { node, score };
+                })
+                .sort(function(a, b) { return b.score - a.score; });
+
+            if (scored.length) {
+                return scored[0].node;
+            }
+
+            for (const link of globalGraphLinks) {
+                if (!explicitEdgeIds.has(link.id)) continue;
+                return getNodeById(link.source) || getNodeById(link.target);
+            }
+
+            return null;
+        }
+
+        function buildCapsuleFocusGraph(highlightNodes = [], highlightEdges = []) {
+            const { directNodeIds, visibleNodeIds, explicitEdgeIds, contextualEdgeIds } = resolveGraphHighlights(highlightNodes, highlightEdges);
+            const centerNode = pickCapsuleCenterNode(directNodeIds, explicitEdgeIds, contextualEdgeIds);
+            if (!centerNode) {
+                return null;
+            }
+
+            const satelliteCandidates = [];
+            const seenSatelliteIds = new Set();
+
+            function pushCandidate(nodeId, scoreBoost = 0) {
+                const normalizedId = String(nodeId);
+                if (!normalizedId || normalizedId === String(centerNode.id) || seenSatelliteIds.has(normalizedId)) {
+                    return;
+                }
+                const node = getNodeById(normalizedId);
+                if (!node) {
+                    return;
+                }
+                let score = scoreBoost;
+                if (directNodeIds.has(node.id)) score += 80;
+                if (visibleNodeIds.has(node.id)) score += 24;
+                globalGraphLinks.forEach(function(link) {
+                    const touchesPair =
+                        (String(link.source) === String(centerNode.id) && String(link.target) === normalizedId) ||
+                        (String(link.target) === String(centerNode.id) && String(link.source) === normalizedId);
+                    if (!touchesPair) return;
+                    if (explicitEdgeIds.has(link.id)) score += 36;
+                    else if (contextualEdgeIds.has(link.id)) score += 18;
+                    else score += 8;
+                });
+                seenSatelliteIds.add(normalizedId);
+                satelliteCandidates.push({ node, score });
+            }
+
+            globalGraphLinks.forEach(function(link) {
+                const touchesCenter = String(link.source) === String(centerNode.id) || String(link.target) === String(centerNode.id);
+                if (!touchesCenter) return;
+                const otherId = String(link.source) === String(centerNode.id) ? link.target : link.source;
+                let baseScore = 0;
+                if (explicitEdgeIds.has(link.id)) baseScore += 50;
+                else if (contextualEdgeIds.has(link.id)) baseScore += 28;
+                else if (visibleNodeIds.has(otherId)) baseScore += 12;
+                pushCandidate(otherId, baseScore);
+            });
+
+            globalGraphNodes.forEach(function(node) {
+                if (directNodeIds.has(node.id) && String(node.id) !== String(centerNode.id)) {
+                    pushCandidate(node.id, 70);
+                }
+            });
+
+            const satellites = satelliteCandidates
+                .sort(function(a, b) { return b.score - a.score; })
+                .slice(0, GRAPH_CAPSULE_LIMIT)
+                .map(function(item) { return item.node; });
+
+            if (!satellites.length) {
+                return null;
+            }
+
+            const nodes = [centerNode].concat(satellites);
+            const links = satellites.map(function(node, index) {
+                const rawLink = getLinkBetweenNodes(centerNode.id, node.id);
+                const meta = getCategoryMeta(node);
+                const isExplicit = rawLink ? explicitEdgeIds.has(rawLink.id) : false;
+                const isContextual = rawLink ? contextualEdgeIds.has(rawLink.id) : false;
+                return {
+                    id: rawLink ? rawLink.id : `focus-link-${index}`,
+                    source: centerNode.id,
+                    target: node.id,
+                    categoryMeta: meta,
+                    explicit: isExplicit,
+                    contextual: isContextual,
+                };
+            });
+
+            return {
+                centerNode,
+                satellites,
+                nodes,
+                links,
+                directNodeIds,
+            };
+        }
+
+        function computeCapsuleFocusPositions(centerNode, satellites) {
+            const size = getGraphStageSize();
+            const width = size.width;
+            const height = size.height;
+            const cx = width / 2;
+            const cy = height / 2 + 6;
+            const ringConfigs = [
+                {
+                    radiusX: Math.min(width * 0.22, 132),
+                    radiusY: Math.min(height * 0.19, 96),
+                    angles: [-90, -18, 54, 126, 198, 270],
+                },
+                {
+                    radiusX: Math.min(width * 0.34, 208),
+                    radiusY: Math.min(height * 0.29, 142),
+                    angles: [-90, -42, 0, 42, 90, 138],
+                },
+                {
+                    radiusX: Math.min(width * 0.43, 266),
+                    radiusY: Math.min(height * 0.37, 178),
+                    angles: [180, 222, 318],
+                },
+            ];
+
+            const anchorPositions = [];
+            ringConfigs.forEach(function(ring) {
+                ring.angles.forEach(function(angleDeg) {
+                    const angle = angleDeg * Math.PI / 180;
+                    anchorPositions.push({
+                        x: cx + Math.cos(angle) * ring.radiusX,
+                        y: cy + Math.sin(angle) * ring.radiusY,
+                    });
+                });
+            });
+
+            const positions = {};
+            positions[centerNode.id] = { x: cx, y: cy };
+            satellites.forEach(function(node, index) {
+                positions[node.id] = anchorPositions[index] || anchorPositions[anchorPositions.length - 1];
+            });
+
+            return { positions, width, height };
+        }
+
+        function renderCapsuleFocusGraph(focusGraph) {
+            graphLastRenderMode = "focus";
+            const layout = computeCapsuleFocusPositions(focusGraph.centerNode, focusGraph.satellites);
+            const positions = layout.positions;
+            const width = layout.width;
+            const height = layout.height;
+            const centerMeta = getGraphRoleMeta(focusGraph.centerNode, focusGraph);
+            const centerPoint = positions[focusGraph.centerNode.id];
+
+            const defsSvg = Object.entries(GRAPH_ROLE_META).map(function(entry) {
+                const key = entry[0];
+                const meta = entry[1];
+                const safeKey = normalizeText(key || meta.key || "other") || "other";
+                return `
+                    <filter id="capsule-shadow-${safeKey}" x="-60%" y="-60%" width="220%" height="220%">
+                        <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="${meta.glow}" flood-opacity="1" />
+                    </filter>
+                `;
+            }).join("");
+
+            const linesSvg = focusGraph.links.map(function(link) {
+                const source = positions[link.source];
+                const target = positions[link.target];
+                if (!source || !target) {
+                    return "";
+                }
+                const roleMeta = getGraphRoleMeta(getNodeById(link.target), focusGraph);
+                const midX = source.x + (target.x - source.x) * 0.52;
+                const midY = source.y + (target.y - source.y) * 0.52;
+                return `
+                    <g class="graph-edge">
+                        <line
+                            x1="${source.x.toFixed(1)}"
+                            y1="${source.y.toFixed(1)}"
+                            x2="${target.x.toFixed(1)}"
+                            y2="${target.y.toFixed(1)}"
+                            stroke="${roleMeta.line}"
+                            stroke-width="${link.explicit ? 2 : 1.6}"
+                            stroke-opacity="0.95"
+                            stroke-linecap="round"
+                        />
+                        <circle
+                            cx="${midX.toFixed(1)}"
+                            cy="${midY.toFixed(1)}"
+                            r="6"
+                            fill="${roleMeta.color}"
+                            fill-opacity="0.88"
+                            stroke="rgba(255,255,255,0.96)"
+                            stroke-width="2"
+                        />
+                    </g>
+                `;
+            }).join("");
+
+            const satelliteSvg = focusGraph.satellites.map(function(node) {
+                const point = positions[node.id];
+                const meta = getGraphRoleMeta(node, focusGraph);
+                const fontSize = 11;
+                const capsuleWidth = Math.max(92, measureLabelWidth(node.name, fontSize) + 24);
+                const capsuleHeight = 36;
+                const x = point.x - capsuleWidth / 2;
+                const y = point.y - capsuleHeight / 2;
+                return `
+                    <g class="graph-node">
+                        <rect
+                            x="${x.toFixed(1)}"
+                            y="${y.toFixed(1)}"
+                            width="${capsuleWidth.toFixed(1)}"
+                            height="${capsuleHeight.toFixed(1)}"
+                            rx="${(capsuleHeight / 2).toFixed(1)}"
+                            ry="${(capsuleHeight / 2).toFixed(1)}"
+                            fill="${meta.soft}"
+                            fill-opacity="0.82"
+                            stroke="${meta.color}"
+                            stroke-width="1.4"
+                            filter="url(#capsule-shadow-${normalizeText(meta.key) || "other"})"
+                        />
+                        <rect
+                            x="${(x + 1).toFixed(1)}"
+                            y="${(y + 1).toFixed(1)}"
+                            width="${(capsuleWidth - 2).toFixed(1)}"
+                            height="${((capsuleHeight / 2) - 2).toFixed(1)}"
+                            rx="${((capsuleHeight / 2) - 2).toFixed(1)}"
+                            ry="${((capsuleHeight / 2) - 2).toFixed(1)}"
+                            fill="rgba(255,255,255,0.5)"
+                        />
+                        <text
+                            x="${point.x.toFixed(1)}"
+                            y="${(point.y + 4).toFixed(1)}"
+                            text-anchor="middle"
+                            fill="${meta.text}"
+                            font-size="${fontSize}"
+                            font-weight="700"
+                        >${escapeHtml(node.name)}</text>
+                    </g>
+                `;
+            }).join("");
+
+            graphChartEl.innerHTML = `
+                <svg viewBox="0 0 ${width} ${height}" width="100%" height="100%" role="img" aria-label="知识图谱">
+                    <defs>${defsSvg}</defs>
+                    <rect x="0" y="0" width="${width}" height="${height}" rx="24" fill="rgba(247,250,247,0.96)" stroke="rgba(223,231,224,0.92)"></rect>
+                    <g opacity="0.16">
+                        <circle cx="${(width * 0.17).toFixed(1)}" cy="${(height * 0.24).toFixed(1)}" r="${Math.max(42, width * 0.09).toFixed(1)}" fill="#ddeef3"></circle>
+                        <circle cx="${(width * 0.83).toFixed(1)}" cy="${(height * 0.28).toFixed(1)}" r="${Math.max(46, width * 0.1).toFixed(1)}" fill="#f6eadf"></circle>
+                    </g>
+                    ${linesSvg}
+                    <g class="graph-core">
+                        <circle
+                            cx="${centerPoint.x.toFixed(1)}"
+                            cy="${centerPoint.y.toFixed(1)}"
+                            r="40"
+                            fill="${centerMeta.color}"
+                            fill-opacity="0.88"
+                            stroke="rgba(255,255,255,0.95)"
+                            stroke-width="3"
+                            filter="url(#capsule-shadow-${normalizeText(centerMeta.key) || "other"})"
+                        />
+                        <circle
+                            cx="${centerPoint.x.toFixed(1)}"
+                            cy="${centerPoint.y.toFixed(1)}"
+                            r="28"
+                            fill="rgba(255,255,255,0.08)"
+                        />
+                        <text
+                            x="${centerPoint.x.toFixed(1)}"
+                            y="${(centerPoint.y + 5).toFixed(1)}"
+                            text-anchor="middle"
+                            fill="#ffffff"
+                            font-size="16"
+                            font-weight="800"
+                        >${escapeHtml(focusGraph.centerNode.name)}</text>
+                    </g>
+                    ${satelliteSvg}
+                </svg>
+            `;
+
+            graphActivePayload = null;
+            graphNodePositions = {};
+            kgStatusEl.textContent = "已根据本轮对话聚焦展示 " + (1 + focusGraph.satellites.length) + " 个相关知识点";
+            updateGraphMeta();
+        }
+
+        function renderGraph(highlightNodes = [], highlightEdges = []) {
+            currentHighlightNodes = Array.isArray(highlightNodes) ? [...highlightNodes] : [];
+            currentHighlightEdges = Array.isArray(highlightEdges) ? [...highlightEdges] : [];
+            if (!globalGraphNodes.length) {
+                renderGraphEmpty("图谱数据暂未就绪。");
+                kgStatusEl.textContent = "暂无可展示的图谱数据";
+                return;
+            }
+
+            const hasHighlights = highlightNodes.length > 0 || highlightEdges.length > 0;
+            if (!hasHighlights) {
+                renderGraphEmpty("输入咨询内容后，我会在这里生成与问题相关的胶囊知识图谱。");
+                kgStatusEl.textContent = "等待本轮对话触发知识关联";
+                updateGraphMeta();
+                return;
+            }
+
+            const focusGraph = buildCapsuleFocusGraph(highlightNodes, highlightEdges);
+            if (!focusGraph) {
+                renderGraphEmpty("这次检索没有形成足够清晰的知识关联，你可以继续补充困扰场景，我再帮你梳理。");
+                kgStatusEl.textContent = "本次未生成可视化知识关系";
+                updateGraphMeta();
+                return;
+            }
+
+            renderCapsuleFocusGraph(focusGraph);
+        }
+
+        async function loadGraphData() {
+            try {
+                renderGraphEmpty("知识图谱准备中，完成咨询后会自动生成相关结构。");
+                const response = await fetch("/graph_data");
+                if (!response.ok) {
+                    throw new Error("图谱接口请求失败");
+                }
+                const data = await response.json();
+                globalGraphNodes = (data.nodes || []).map((node) => ({
+                    ...node,
+                    category: normalizeGraphCategoryLabel(node.category),
+                    baseColor: normalizeGraphCategoryLabel(node.category).includes("情绪")
+                        ? "#ef4444"
+                        : (normalizeGraphCategoryLabel(node.category).includes("疏导") ? "#10b981" : "#3b82f6")
+                }));
+                globalGraphLinks = (data.links || []).map((link) => ({
+                    ...link,
+                    id: link.id || buildEdgeVisualKey(link)
+                }));
+                refreshGraphExplorerData();
+                if (!globalGraphNodes.length) {
+                    renderGraphEmpty("图谱文件存在，但暂时没有可关联的节点。");
+                    kgStatusEl.textContent = "图谱文件存在，但暂时没有可渲染的节点";
+                    updateGraphMeta();
+                    return;
+                }
+                kgStatusEl.textContent = "图谱已载入，等待本轮咨询触发关联";
+                updateGraphMeta();
+            } catch (error) {
+                console.error("加载图谱失败", error);
+                renderGraphEmpty("图谱加载失败，请稍后重试。");
+                kgStatusEl.textContent = "图谱加载失败：" + (error && error.message ? error.message : "未知错误");
+                updateGraphMeta();
+            }
+        }
+
+        async function sendMessage() {
+            const value = chatInputEl.value.trim();
+            if (!value) return;
+
+            try {
+                await unlockMediaPlayback();
+            } catch (error) {
+                console.warn("媒体预解锁失败。", error);
+            }
+
+            appendMessage("user", value);
+            chatInputEl.value = "";
+            sendBtnEl.disabled = true;
+            const requestInputMode = inputMode === "voice" && voiceEmotionResult ? "voice" : "text";
+            const requestSpeechEmotions = requestInputMode === "voice" ? (voiceEmotionResult.emotions || []) : [];
+            setMediaState("处理中", "生成中", requestInputMode === "voice" ? "正在融合文本与语音情绪" : "正在生成回答与媒体");
+
+            const loadingId = `loading-${Date.now()}`;
+            appendMessage(
+                "assistant",
+                requestInputMode === "voice"
+                    ? "正在分析文本和语音情绪、检索图谱并生成数字人播报..."
+                    : "正在分析情绪、检索图谱并生成数字人播报...",
+                "loading",
+                { id: loadingId }
+            );
+
+            try {
+                const response = await fetch("/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        message: value,
+                        input_mode: requestInputMode,
+                        speech_emotions: requestSpeechEmotions,
+                        speech_emotion_model: voiceEmotionResult ? voiceEmotionResult.model : null,
+                    })
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.detail || "请求失败");
+                }
+
+                const loadingEl = document.getElementById(loadingId);
+                if (loadingEl) loadingEl.remove();
+
+                appendMessage("assistant", data.reply || "暂无回复。");
+                const mediaTask = playAssistantMedia(data).catch(function(error) {
+                    console.error("媒体播放失败", error);
+                    setMediaState("媒体异常", "异常", "媒体播放失败");
+                });
+
+                try {
+                    updateEmotionPanel(data.emotions || []);
+                    if (data.speech_emotions && data.speech_emotions.length) {
+                        renderVoiceEmotionPreview(data.speech_emotions);
+                    }
+                } catch (error) {
+                    console.error("情绪面板更新失败", error);
+                }
+
+                try {
+                    renderGraph(data.highlight_nodes || [], data.highlight_edges || []);
+                } catch (error) {
+                    console.error("知识图谱渲染失败", error);
+                    renderGraphEmpty("知识图谱暂时无法展示，但回答和数字人播报仍然可用。");
+                    kgStatusEl.textContent = "知识图谱渲染失败";
+                }
+
+                if (!graphExplorerEl.classList.contains("hidden")) {
+                    renderGraphExplorer();
+                }
+
+                await mediaTask;
+            } catch (error) {
+                console.error("请求失败", error);
+                const loadingEl = document.getElementById(loadingId);
+                if (loadingEl) {
+                    loadingEl.remove();
+                }
+                appendMessage("assistant", `系统繁忙，请稍后重试：${error.message}`);
+                setMediaState("请求失败", "异常", "未能生成媒体");
+            } finally {
+                sendBtnEl.disabled = false;
+            }
+        }
+
+        function clearGraphViewState() {
+            graphDragState = null;
+            graphActivePayload = null;
+            graphActiveRenderKey = "";
+            graphNodePositions = {};
+        }
+
+        function resetGraph() {
+            clearGraphViewState();
+            currentHighlightNodes = [];
+            currentHighlightEdges = [];
+            renderGraphEmpty("已清空本轮知识关联，等待新的咨询内容触发图谱。");
+            kgStatusEl.textContent = "已清空本轮知识关联";
+            updateGraphMeta();
+            if (!graphExplorerEl.classList.contains("hidden")) {
+                renderGraphExplorer();
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === "Enter") {
+                sendMessage();
+            }
+        }
+
+        window.addEventListener("resize", () => {
+            if (emotionChart) {
+                emotionChart.resize();
+            }
+            if (globalGraphNodes.length && (currentHighlightNodes.length || currentHighlightEdges.length)) {
+                clearGraphViewState();
+                renderGraph(currentHighlightNodes, currentHighlightEdges);
+            } else if (graphLastRenderMode === "empty") {
+                renderGraphEmpty("输入咨询内容后，我会在这里生成与问题相关的胶囊知识图谱。");
+            }
+            if (!graphExplorerEl.classList.contains("hidden")) {
+                renderGraphExplorer();
+            }
+        });
+
+        window.addEventListener("keydown", function(event) {
+            if (event.key === "Escape" && graphExplorerEl && !graphExplorerEl.classList.contains("hidden")) {
+                closeGraphExplorer();
+            }
+        });
+
+        window.addEventListener("load", () => {
+            if (connectionLabelEl) {
+                connectionLabelEl.textContent = "连接中";
+            }
+            if (!chatMessagesEl.children.length) {
+                appendMessage("assistant", "你好，我会结合知识图谱和情绪分析，给你一个更有针对性的回应。你可以直接说说最近困扰你的事情。");
+            }
+            updateEmotionPanel([]);
+            updateGraphMeta();
+            if (emotionChart) {
+                emotionChart.resize();
+            }
+            renderGraphEmpty("输入咨询内容后，我会在这里生成与问题相关的胶囊知识图谱。");
+            loadGraphData();
+        });
+    </script>
+</body>
+</html>

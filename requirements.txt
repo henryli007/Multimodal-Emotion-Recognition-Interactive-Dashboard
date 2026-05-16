@@ -1,0 +1,49 @@
+# Core web service
+aiohttp>=3.9
+edge-tts>=6.1
+fastapi>=0.110
+networkx>=3.2
+numpy>=1.24
+pillow>=9.2,<12
+pydantic>=2.6
+torch>=2.1
+transformers>=4.46,<5
+uvicorn[standard]>=0.29
+
+# RAG / embeddings
+accelerate>=0.30
+fsspec==2026.2.0
+lightrag-hku>=1.0.0
+sentencepiece>=0.2
+
+# Optional audio metadata fallback
+librosa>=0.10
+scikit-learn>=1.4
+soundfile>=0.12
+torchaudio>=2.1
+python-multipart>=0.0.9
+
+# Optional digital human / video backend
+albumentations>=2.0
+decord>=0.6
+diffusers>=0.30.1,<0.36
+einops>=0.8
+ftfy>=6.3
+imageio[ffmpeg]>=2.37
+moviepy==2.2.1
+omegaconf>=2.3
+opencv-python>=4.9
+pyloudnorm>=0.2
+safetensors>=0.4
+timm>=1.0
+tomesd>=0.1
+torchdiffeq>=0.2
+torchsde>=0.2
+
+# Optional graph visualization
+pyvis>=0.3.2
+
+# Optional fine-tuning
+datasets>=2.18
+peft>=0.11
+trl>=0.8

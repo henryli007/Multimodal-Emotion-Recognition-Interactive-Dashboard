@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>知识图谱查看器</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --text: #1f2933;
+      --muted: #697586;
+      --line: #d7dde6;
+      --accent: #0f766e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+    .app {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr) 360px;
+      height: 100vh;
+    }
+    aside {
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      padding: 16px;
+      overflow: auto;
+    }
+    .details {
+      border-right: 0;
+      border-left: 1px solid var(--line);
+    }
+    h1 {
+      margin: 0 0 14px;
+      font-size: 18px;
+      line-height: 1.3;
+      font-weight: 700;
+    }
+    h2 {
+      margin: 22px 0 10px;
+      font-size: 13px;
+      color: #364152;
+      text-transform: uppercase;
+    }
+    .control {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    label {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    input[type="search"], select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 9px 10px;
+      background: #fff;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+    }
+    input[type="range"] { width: 100%; }
+    .toolbar {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      display: flex;
+      gap: 8px;
+      z-index: 3;
+    }
+    button {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 8px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+    }
+    button:hover { border-color: #9aa4b2; }
+    .stage {
+      position: relative;
+      min-width: 0;
+      background: #fbfcfe;
+    }
+    svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .legend {
+      display: grid;
+      gap: 7px;
+    }
+    .legend-item {
+      display: grid;
+      grid-template-columns: 14px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      padding: 3px 0;
+    }
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 1px solid rgba(0,0,0,.12);
+    }
+    .count {
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 14px 0;
+    }
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      background: #fafbfc;
+    }
+    .stat b {
+      display: block;
+      font-size: 20px;
+      font-variant-numeric: tabular-nums;
+    }
+    .stat span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .hint, .kv {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .title {
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.35;
+      margin-bottom: 8px;
+      word-break: break-word;
+    }
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: #eef2f6;
+      color: #344054;
+      font-size: 12px;
+      margin: 0 6px 6px 0;
+    }
+    .evidence {
+      border-left: 3px solid var(--accent);
+      padding-left: 10px;
+      margin-top: 10px;
+      color: #364152;
+      font-size: 13px;
+      line-height: 1.55;
+      word-break: break-word;
+    }
+    .node circle {
+      stroke: #fff;
+      stroke-width: 1.4px;
+      cursor: pointer;
+    }
+    .node text {
+      pointer-events: none;
+      font-size: 11px;
+      fill: #26323f;
+      paint-order: stroke;
+      stroke: #fff;
+      stroke-width: 3px;
+      stroke-linejoin: round;
+    }
+    .link {
+      stroke: #9aa4b2;
+      stroke-opacity: .34;
+      cursor: pointer;
+    }
+    .link.active { stroke: #0f766e; stroke-opacity: .85; }
+    .node.dim, .link.dim { opacity: .12; }
+    .node.active circle { stroke: #111827; stroke-width: 2.4px; }
+    @media (max-width: 980px) {
+      .app { grid-template-columns: 260px 1fr; }
+      .details { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <h1>知识图谱查看器</h1>
+      <div id="sourceBadge" class="hint">数据源：加载中</div>
+      <div class="stats">
+        <div class="stat"><b id="nodeCount">0</b><span>节点</span></div>
+        <div class="stat"><b id="linkCount">0</b><span>关系</span></div>
+      </div>
+      <div class="control">
+        <label>搜索节点</label>
+        <input id="search" type="search" placeholder="输入武器、型号、国家..." />
+      </div>
+      <div class="control">
+        <label>实体类型</label>
+        <select id="typeFilter">
+          <option value="__all__">全部类型</option>
+        </select>
+      </div>
+      <div class="control">
+        <label>关系类型</label>
+        <select id="relationFilter">
+          <option value="__all__">全部关系</option>
+        </select>
+      </div>
+      <div class="control">
+        <label><span>最大节点数</span><span id="limitLabel">350</span></label>
+        <input id="limit" type="range" min="80" max="2158" step="10" value="350" />
+      </div>
+      <div class="control">
+        <label><span>最小度数</span><span id="degreeLabel">1</span></label>
+        <input id="degree" type="range" min="0" max="30" step="1" value="1" />
+      </div>
+      <h2>类型图例</h2>
+      <div id="legend" class="legend"></div>
+    </aside>
+    <main class="stage">
+      <div class="toolbar">
+        <button id="reset">重置视图</button>
+        <button id="showCore">核心图</button>
+        <button id="showWeapons">只看武器</button>
+      </div>
+      <svg id="graph" aria-label="knowledge graph"></svg>
+    </main>
+    <aside class="details">
+      <h1>详情</h1>
+      <div id="details" class="hint">点击节点或关系查看详情。节点大小由连接边数量决定。</div>
+    </aside>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <script>
+    const DATA_SOURCES = {
+      jsonl: { label: "规则化 JSONL 图谱", script: "./graph_viewer_data.js" },
+      lightrag: { label: "LightRAG 中文图谱", script: "./lightrag_graph_viewer_data.js" }
+    };
+    const selectedSourceKey = new URLSearchParams(window.location.search).get("source") === "lightrag" ? "lightrag" : "jsonl";
+    window.KG_SOURCE_LABEL = DATA_SOURCES[selectedSourceKey].label;
+    document.write(`<script src="${DATA_SOURCES[selectedSourceKey].script}"><\/script>`);
+  </script>
+  <script>
+    const COLORS = {
+      weapon: "#2563eb",
+      weapon_category: "#0f766e",
+      country: "#dc2626",
+      caliber: "#7c3aed",
+      model: "#ea580c",
+      parameter_name: "#64748b",
+      parameter_value: "#0891b2",
+      ammunition: "#be123c",
+      material: "#16a34a",
+      organization: "#9333ea",
+      time: "#ca8a04",
+      capability: "#0284c7",
+      section: "#475569",
+      variant: "#f97316",
+      platform: "#15803d",
+      number: "#6b7280",
+      chapter: "#0d9488",
+      topic: "#0369a1",
+      concept_type: "#94a3b8",
+      artifact: "#2563eb",
+      person: "#c026d3",
+      geo: "#16a34a",
+      event: "#ca8a04",
+      category: "#0f766e",
+      technology: "#7c3aed",
+      data: "#64748b",
+      concept: "#0891b2",
+      unknown: "#94a3b8",
+      "武器装备": "#2563eb",
+      "武器类别": "#0f766e",
+      "国家地区": "#dc2626",
+      "口径规格": "#7c3aed",
+      "型号": "#ea580c",
+      "参数项": "#64748b",
+      "参数值": "#0891b2",
+      "构件系统": "#9333ea",
+      "弹药": "#be123c",
+      "材料": "#16a34a",
+      "组织机构": "#9333ea",
+      "时间": "#ca8a04",
+      "能力用途": "#0284c7",
+      "内容栏目": "#475569",
+      "衍生型号": "#f97316",
+      "平台载具": "#15803d",
+      "数量指标": "#6b7280",
+      "章节": "#0d9488",
+      "主题": "#0369a1",
+      "概念类型": "#94a3b8",
+      "其他": "#334155"
+    };
+    const CORE_TYPES = new Set([
+      "weapon", "weapon_category", "country", "caliber", "model", "parameter_value", "variant", "ammunition", "capability",
+      "武器装备", "武器类别", "国家地区", "口径规格", "型号", "参数值", "衍生型号", "弹药", "能力用途"
+    ]);
+    const data = window.KG_DATA;
+    document.getElementById("sourceBadge").textContent = `数据源：${window.KG_SOURCE_LABEL}`;
+    const allNodes = data.nodes;
+    const allLinks = data.links;
+    const weaponType = allNodes.some(n => n.type === "weapon") ? "weapon" : "武器装备";
+    const byId = new Map(allNodes.map(d => [d.id, d]));
+    const svg = d3.select("#graph");
+    const stage = document.querySelector(".stage");
+    const width = () => stage.clientWidth;
+    const height = () => stage.clientHeight;
+    const g = svg.append("g");
+    const linkLayer = g.append("g");
+    const nodeLayer = g.append("g");
+    const zoom = d3.zoom().scaleExtent([0.08, 5]).on("zoom", event => g.attr("transform", event.transform));
+    svg.call(zoom);
+
+    const state = { type: "__all__", relation: "__all__", query: "", limit: 350, minDegree: 1, mode: "core" };
+    let simulation, currentNodes = [], currentLinks = [];
+
+    function color(type) { return COLORS[type] || "#334155"; }
+    function radius(d) { return Math.max(5, Math.min(24, 4 + Math.sqrt(d.degree || 1) * 2.2)); }
+    function typeLabel(type) { return data.typeLabels[type] || type; }
+
+    function setupControls() {
+      const typeCounts = d3.rollup(allNodes, v => v.length, d => d.type);
+      const relationCounts = d3.rollup(allLinks, v => v.length, d => d.type || "关联");
+      const select = document.getElementById("typeFilter");
+      [...typeCounts.entries()].sort((a,b) => d3.descending(a[1], b[1])).forEach(([type, count]) => {
+        const opt = document.createElement("option");
+        opt.value = type;
+        opt.textContent = `${typeLabel(type)} (${count})`;
+        select.appendChild(opt);
+      });
+      const relationSelect = document.getElementById("relationFilter");
+      [...relationCounts.entries()].sort((a,b) => d3.descending(a[1], b[1])).forEach(([type, count]) => {
+        const opt = document.createElement("option");
+        opt.value = type;
+        opt.textContent = `${type} (${count})`;
+        relationSelect.appendChild(opt);
+      });
+      document.getElementById("search").addEventListener("input", e => { state.query = e.target.value.trim(); state.mode = "custom"; render(); });
+      select.addEventListener("change", e => { state.type = e.target.value; state.mode = "custom"; render(); });
+      relationSelect.addEventListener("change", e => { state.relation = e.target.value; state.mode = "custom"; render(); });
+      document.getElementById("limit").addEventListener("input", e => {
+        state.limit = Number(e.target.value);
+        document.getElementById("limitLabel").textContent = state.limit;
+        render();
+      });
+      document.getElementById("degree").addEventListener("input", e => {
+        state.minDegree = Number(e.target.value);
+        document.getElementById("degreeLabel").textContent = state.minDegree;
+        state.mode = "custom";
+        render();
+      });
+      document.getElementById("reset").addEventListener("click", () => svg.transition().duration(450).call(zoom.transform, d3.zoomIdentity));
+      document.getElementById("showCore").addEventListener("click", () => {
+        state.mode = "core"; state.type = "__all__"; state.relation = "__all__"; state.query = ""; state.minDegree = 1; state.limit = 350;
+        syncControls(); render();
+      });
+      document.getElementById("showWeapons").addEventListener("click", () => {
+        state.mode = "custom"; state.type = weaponType; state.relation = "__all__"; state.query = ""; state.minDegree = 0; state.limit = 600;
+        syncControls(); render();
+      });
+
+      const legend = document.getElementById("legend");
+      [...typeCounts.entries()].sort((a,b) => d3.ascending(typeLabel(a[0]), typeLabel(b[0]))).forEach(([type, count]) => {
+        const item = document.createElement("div");
+        item.className = "legend-item";
+        item.innerHTML = `<span class="swatch" style="background:${color(type)}"></span><span>${typeLabel(type)}</span><span class="count">${count}</span>`;
+        legend.appendChild(item);
+      });
+    }
+
+    function syncControls() {
+      document.getElementById("search").value = state.query;
+      document.getElementById("typeFilter").value = state.type;
+      document.getElementById("relationFilter").value = state.relation;
+      document.getElementById("limit").value = state.limit;
+      document.getElementById("limitLabel").textContent = state.limit;
+      document.getElementById("degree").value = state.minDegree;
+      document.getElementById("degreeLabel").textContent = state.minDegree;
+    }
+
+    function filteredGraph() {
+      const q = state.query.toLowerCase();
+      let nodes = allNodes.filter(n => {
+      if (state.mode === "core" && CORE_TYPES.has(n.type) === false && (n.degree || 0) < 2) return false;
+        if (state.type !== "__all__" && n.type !== state.type) return false;
+        if ((n.degree || 0) < state.minDegree) return false;
+        if (q && !`${n.label} ${n.typeLabel}`.toLowerCase().includes(q)) return false;
+        return true;
+      });
+      nodes = nodes.sort((a,b) => d3.descending(a.degree || 0, b.degree || 0)).slice(0, state.limit);
+      const ids = new Set(nodes.map(n => n.id));
+      const links = allLinks.filter(l => {
+        if (!ids.has(l.source) || !ids.has(l.target)) return false;
+        if (state.relation !== "__all__" && (l.type || "关联") !== state.relation) return false;
+        return true;
+      });
+      const connected = new Set();
+      links.forEach(l => { connected.add(l.source); connected.add(l.target); });
+      if (!q && state.type === "__all__") nodes = nodes.filter(n => connected.has(n.id) || (n.degree || 0) === 0);
+      return { nodes: nodes.map(d => ({...d})), links: links.map(d => ({...d})) };
+    }
+
+    function render() {
+      const graph = filteredGraph();
+      currentNodes = graph.nodes;
+      currentLinks = graph.links;
+      document.getElementById("nodeCount").textContent = currentNodes.length;
+      document.getElementById("linkCount").textContent = currentLinks.length;
+      if (simulation) simulation.stop();
+
+      linkLayer.selectAll("*").remove();
+      nodeLayer.selectAll("*").remove();
+
+      const links = linkLayer.selectAll("line")
+        .data(currentLinks, d => d.id)
+        .join("line")
+        .attr("class", "link")
+        .attr("stroke-width", d => Math.max(0.8, Math.min(3, Math.sqrt((byId.get(d.source)?.degree || 1) + (byId.get(d.target)?.degree || 1)) / 6)))
+        .on("click", (event, d) => { event.stopPropagation(); showLink(d); highlightLink(d); });
+
+      const nodes = nodeLayer.selectAll("g")
+        .data(currentNodes, d => d.id)
+        .join("g")
+        .attr("class", "node")
+        .call(d3.drag()
+          .on("start", dragstarted)
+          .on("drag", dragged)
+          .on("end", dragended))
+        .on("click", (event, d) => { event.stopPropagation(); showNode(d); highlightNode(d); });
+
+      nodes.append("circle")
+        .attr("r", radius)
+        .attr("fill", d => color(d.type));
+
+      nodes.append("title").text(d => `${d.label}\n${d.typeLabel}\n度数 ${d.degree}`);
+      nodes.filter(d => d.degree >= 12 || d.type === "weapon")
+        .append("text")
+        .attr("x", d => radius(d) + 4)
+        .attr("y", 4)
+        .text(d => d.label.length > 18 ? d.label.slice(0, 18) + "..." : d.label);
+
+      simulation = d3.forceSimulation(currentNodes)
+        .force("link", d3.forceLink(currentLinks).id(d => d.id).distance(d => 52 + Math.min(80, ((byId.get(d.source)?.degree || 0) + (byId.get(d.target)?.degree || 0)))))
+        .force("charge", d3.forceManyBody().strength(d => -80 - radius(d) * 14))
+        .force("center", d3.forceCenter(width() / 2, height() / 2))
+        .force("collide", d3.forceCollide().radius(d => radius(d) + 5))
+        .alpha(0.9)
+        .on("tick", () => {
+          links
+            .attr("x1", d => d.source.x)
+            .attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x)
+            .attr("y2", d => d.target.y);
+          nodes.attr("transform", d => `translate(${d.x},${d.y})`);
+        });
+    }
+
+    function showNode(d) {
+      const pages = d.sourcePages?.length ? d.sourcePages.join(", ") : "未知";
+      document.getElementById("details").innerHTML = `
+        <div class="title">${escapeHtml(d.label)}</div>
+        <span class="pill">${escapeHtml(d.typeLabel)}</span>
+        <span class="pill">度数 ${d.degree || 0}</span>
+        <h2>来源页</h2>
+        <div class="kv">${pages}</div>
+        <h2>ID</h2>
+        <div class="kv">${escapeHtml(d.id)}</div>
+      `;
+    }
+    function showLink(d) {
+      const pages = d.sourcePages?.length ? d.sourcePages.join(", ") : "未知";
+      document.getElementById("details").innerHTML = `
+        <div class="title">${escapeHtml(byId.get(d.source)?.label || d.source)}</div>
+        <span class="pill">${escapeHtml(d.type)}</span>
+        <div class="title" style="margin-top:12px">${escapeHtml(byId.get(d.target)?.label || d.target)}</div>
+        <h2>来源页</h2>
+        <div class="kv">${pages}</div>
+        <h2>证据</h2>
+        <div class="evidence">${escapeHtml(d.evidence || "无")}</div>
+      `;
+    }
+    function highlightNode(d) {
+      const neighbors = new Set([d.id]);
+      currentLinks.forEach(l => {
+        const s = typeof l.source === "object" ? l.source.id : l.source;
+        const t = typeof l.target === "object" ? l.target.id : l.target;
+        if (s === d.id) neighbors.add(t);
+        if (t === d.id) neighbors.add(s);
+      });
+      nodeLayer.selectAll(".node").classed("dim", n => !neighbors.has(n.id)).classed("active", n => n.id === d.id);
+      linkLayer.selectAll(".link").classed("dim", l => {
+        const s = typeof l.source === "object" ? l.source.id : l.source;
+        const t = typeof l.target === "object" ? l.target.id : l.target;
+        return s !== d.id && t !== d.id;
+      }).classed("active", l => {
+        const s = typeof l.source === "object" ? l.source.id : l.source;
+        const t = typeof l.target === "object" ? l.target.id : l.target;
+        return s === d.id || t === d.id;
+      });
+    }
+    function highlightLink(d) {
+      const s = typeof d.source === "object" ? d.source.id : d.source;
+      const t = typeof d.target === "object" ? d.target.id : d.target;
+      nodeLayer.selectAll(".node").classed("dim", n => n.id !== s && n.id !== t).classed("active", n => n.id === s || n.id === t);
+      linkLayer.selectAll(".link").classed("dim", l => l.id !== d.id).classed("active", l => l.id === d.id);
+    }
+    svg.on("click", () => {
+      nodeLayer.selectAll(".node").classed("dim", false).classed("active", false);
+      linkLayer.selectAll(".link").classed("dim", false).classed("active", false);
+    });
+    function dragstarted(event, d) {
+      if (!event.active) simulation.alphaTarget(0.25).restart();
+      d.fx = d.x; d.fy = d.y;
+    }
+    function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
+    function dragended(event, d) {
+      if (!event.active) simulation.alphaTarget(0);
+      d.fx = null; d.fy = null;
+    }
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    }
+    window.addEventListener("resize", () => {
+      if (simulation) {
+        simulation.force("center", d3.forceCenter(width() / 2, height() / 2));
+        simulation.alpha(0.25).restart();
+      }
+    });
+
+    setupControls();
+    render();
+  </script>
+</body>
+</html>
