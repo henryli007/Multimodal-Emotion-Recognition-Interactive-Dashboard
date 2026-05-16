@@ -1855,23 +1855,108 @@ def map_text_emotion_label(label: str) -> str:
     return emotion_map.get(raw, emotion_map.get(raw.lower(), raw))
 
 
+def local_text_emotion_model_ready(model_name_or_path: str, cache_dir: str) -> bool:
+    candidate = Path(model_name_or_path).expanduser()
+    if candidate.exists() and (
+        (candidate / "model.safetensors").exists() or (candidate / "pytorch_model.bin").exists()
+    ):
+        return True
+
+    cache_root = Path(cache_dir)
+    if not cache_root.exists():
+        return False
+
+    if any(cache_root.rglob("model.safetensors")) or any(cache_root.rglob("pytorch_model.bin")):
+        return True
+    return False
+
+
+async def analyze_text_emotions_with_llm(text: str) -> list[dict[str, Any]]:
+    prompt = [
+        {
+            "role": "system",
+            "content": (
+                "你是一个中文情绪识别器。"
+                "请根据用户文本输出前5个最相关情绪及百分比。"
+                "只输出 JSON 数组，每个元素格式为 "
+                '{"name":"情绪","value":数值}。'
+                "百分比总和必须约等于100。"
+                "情绪名称请使用中文，优先从这些词中选择："
+                "平静、紧张、焦虑、悲伤、高兴、愤怒、困惑、失望、关心、惊讶、厌恶、渴望、宽慰、乐观。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"请分析下面这句话的情绪：{text}",
+        },
+    ]
+    raw = await call_siliconflow_api(prompt, max_tokens=180)
+    match = re.search(r"\[[\s\S]*\]", raw)
+    payload = match.group(0) if match else raw
+    parsed = json.loads(payload)
+    if not isinstance(parsed, list):
+        raise ValueError("LLM emotion output is not a list")
+    sanitized = []
+    for item in parsed[:5]:
+        if not isinstance(item, dict):
+            continue
+        name = map_text_emotion_label(str(item.get("name", "")).strip())
+        try:
+            value = float(item.get("value", 0.0))
+        except Exception:
+            value = 0.0
+        if name:
+            sanitized.append({"name": name, "value": max(0.0, value)})
+    return normalize_emotion_percentages(sanitized or [{"name": "平静", "value": 100.0}], decimals=1)
+
+
+async def analyze_text_emotions(text: str) -> list[dict[str, Any]]:
+    global emotion_classifier
+    if emotion_classifier is not None:
+        try:
+            all_results = emotion_classifier(text)[0]
+            all_results.sort(key=lambda item: item["score"], reverse=True)
+            raw_emotions = [
+                {"name": map_text_emotion_label(item["label"]), "value": float(item["score"]) * 100.0}
+                for item in all_results[:5]
+            ]
+            return normalize_emotion_percentages(raw_emotions, decimals=1)
+        except Exception:
+            logger.exception("Local text emotion model inference failed; fallback to LLM.")
+
+    return await analyze_text_emotions_with_llm(text)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     global emotion_classifier, rag
 
-    Path(TEXT_EMOTION_CACHE_DIR).mkdir(parents=True, exist_ok=True)
-    text_emotion_tokenizer = AutoTokenizer.from_pretrained(
-        TEXT_EMOTION_MODEL,
-        cache_dir=TEXT_EMOTION_CACHE_DIR,
-    )
-    emotion_classifier = pipeline(
-        "text-classification",
-        model=TEXT_EMOTION_MODEL,
-        tokenizer=text_emotion_tokenizer,
-        top_k=None,
-        device=0 if torch.cuda.is_available() else -1,
-    )
-    logger.info("Loaded text emotion model from %s", TEXT_EMOTION_MODEL)
+    try:
+        Path(TEXT_EMOTION_CACHE_DIR).mkdir(parents=True, exist_ok=True)
+        if local_text_emotion_model_ready(TEXT_EMOTION_MODEL, TEXT_EMOTION_CACHE_DIR):
+            text_emotion_tokenizer = AutoTokenizer.from_pretrained(
+                TEXT_EMOTION_MODEL,
+                cache_dir=TEXT_EMOTION_CACHE_DIR,
+                local_files_only=True,
+            )
+            emotion_classifier = pipeline(
+                "text-classification",
+                model=TEXT_EMOTION_MODEL,
+                tokenizer=text_emotion_tokenizer,
+                top_k=None,
+                device=0 if torch.cuda.is_available() else -1,
+                local_files_only=True,
+            )
+            logger.info("Loaded text emotion model from %s", TEXT_EMOTION_MODEL)
+        else:
+            emotion_classifier = None
+            logger.warning(
+                "Local text emotion model cache not found for %s; use LLM fallback instead of blocking startup.",
+                TEXT_EMOTION_MODEL,
+            )
+    except Exception:
+        emotion_classifier = None
+        logger.exception("Failed to initialize local text emotion model; fallback to LLM text emotion analysis.")
 
     rag = kb_rag
     rag.llm_model_func = local_llm_for_rag
@@ -2031,13 +2116,7 @@ async def chat_endpoint(req: ChatRequest):
     speech_emotions_data = normalize_emotion_percentages(req.speech_emotions or [], decimals=1) if req.speech_emotions else []
 
     try:
-        all_results = emotion_classifier(user_input)[0]
-        all_results.sort(key=lambda item: item["score"], reverse=True)
-        raw_emotions = [
-            {"name": map_text_emotion_label(item["label"]), "value": float(item["score"]) * 100.0}
-            for item in all_results[:5]
-        ]
-        emotions_data = normalize_emotion_percentages(raw_emotions, decimals=1)
+        emotions_data = await analyze_text_emotions(user_input)
         top_emotions = [item["name"] for item in emotions_data[:2]] or ["平静"]
     except Exception:
         traceback.print_exc()
