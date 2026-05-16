@@ -114,6 +114,7 @@ GRAPH_TERM_ALIASES: dict[str, list[str]] = {
 
 _graph_snapshot_cache: dict[str, Any] = {"mtime": None, "snapshot": None}
 ECHOMIMIC_PROGRESS_RE = re.compile(r"^EMV3_PROGRESS\|phase=(.*?)\|percent=([0-9]+(?:\.[0-9]+)?)\|detail=(.*)$")
+logger = logging.getLogger(__name__)
 
 
 def normalize_text(value: Any) -> str:
@@ -1827,8 +1828,25 @@ async def lifespan(_: FastAPI):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     translation_model_path = "./models/Helsinki-NLP--opus-mt-zh-en"
-    translator_tokenizer = MarianTokenizer.from_pretrained(translation_model_path)
-    translator_model = MarianMTModel.from_pretrained(translation_model_path).to(device)
+    try:
+        translator_tokenizer = MarianTokenizer.from_pretrained(translation_model_path)
+        translation_model_dir = Path(translation_model_path)
+        if (translation_model_dir / "model.safetensors").exists():
+            translator_model = MarianMTModel.from_pretrained(
+                translation_model_path,
+                use_safetensors=True,
+            ).to(device)
+            logger.info("Loaded translator from %s", translation_model_path)
+        else:
+            translator_model = None
+            logger.warning(
+                "Skip translator load: %s only provides .bin weights and cannot be safely loaded with current torch/transformers.",
+                translation_model_path,
+            )
+    except Exception:
+        translator_tokenizer = None
+        translator_model = None
+        logger.exception("Failed to initialize translator; falling back to untranslated text.")
 
     roberta_path = "./models/SamLowe--roberta-base-go_emotions"
     emotion_classifier = pipeline("text-classification", model=roberta_path, top_k=None)
