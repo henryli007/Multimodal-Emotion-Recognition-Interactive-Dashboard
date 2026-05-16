@@ -7,10 +7,23 @@ import numpy as np
 import torch
 
 
-DEFAULT_SPEECH_EMOTION_MODEL = os.getenv(
-    "SPEECH_EMOTION_MODEL",
-    "Dpngtm/wav2vec2-emotion-recognition",
-)
+def resolve_default_speech_model() -> str:
+    configured = os.getenv("SPEECH_EMOTION_MODEL")
+    if configured:
+        return configured
+
+    project_root = Path(__file__).resolve().parent.parent
+    local_candidates = [
+        project_root / "models" / "speech-emotion-direct",
+        project_root / "models" / "speech-emotion",
+    ]
+    for candidate in local_candidates:
+        if (candidate / "model.safetensors").exists():
+            return str(candidate)
+    return "Dpngtm/wav2vec2-emotion-recognition"
+
+
+DEFAULT_SPEECH_EMOTION_MODEL = resolve_default_speech_model()
 DEFAULT_SPEECH_EMOTION_CACHE_DIR = os.getenv(
     "SPEECH_EMOTION_CACHE_DIR",
     str(Path(__file__).resolve().parent.parent / "models" / "speech-emotion"),

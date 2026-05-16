@@ -27,7 +27,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.responses import Response
-from transformers import MarianMTModel, MarianTokenizer, pipeline
+from transformers import AutoTokenizer, pipeline
 
 from app.knowledge_base import SILICONFLOW_API_KEY as KB_SILICONFLOW_API_KEY
 from app.knowledge_base import rag as kb_rag
@@ -1784,10 +1784,13 @@ class NoCacheStaticFiles(StaticFiles):
 
 app.mount("/static", NoCacheStaticFiles(directory=STATIC_DIR), name="static")
 
-translator_tokenizer = None
-translator_model = None
 emotion_classifier = None
 rag = None
+TEXT_EMOTION_MODEL = os.getenv("TEXT_EMOTION_MODEL", "Johnson8187/Chinese-Emotion-Small")
+TEXT_EMOTION_CACHE_DIR = os.getenv(
+    "TEXT_EMOTION_CACHE_DIR",
+    str(PROJECT_ROOT / "models" / "text-emotion"),
+)
 
 emotion_map = {
     "admiration": "钦佩",
@@ -1818,38 +1821,57 @@ emotion_map = {
     "sadness": "悲伤",
     "surprise": "惊讶",
     "neutral": "平静",
+    "neutral tone": "平静",
+    "平淡語氣": "平静",
+    "平淡语气": "平静",
+    "concerned tone": "关心",
+    "關切語調": "关心",
+    "关切语调": "关心",
+    "happy tone": "高兴",
+    "開心語調": "高兴",
+    "开心语调": "高兴",
+    "angry tone": "愤怒",
+    "憤怒語調": "愤怒",
+    "愤怒语调": "愤怒",
+    "sad tone": "悲伤",
+    "悲傷語調": "悲伤",
+    "悲伤语调": "悲伤",
+    "questioning tone": "困惑",
+    "疑問語調": "困惑",
+    "疑问语调": "困惑",
+    "surprised tone": "惊讶",
+    "驚奇語調": "惊讶",
+    "惊奇语调": "惊讶",
+    "disgusted tone": "厌恶",
+    "厭惡語調": "厌恶",
+    "厌恶语调": "厌恶",
 }
+
+
+def map_text_emotion_label(label: str) -> str:
+    raw = str(label or "").strip()
+    if not raw:
+        return "平静"
+    return emotion_map.get(raw, emotion_map.get(raw.lower(), raw))
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    global translator_tokenizer, translator_model, emotion_classifier, rag
+    global emotion_classifier, rag
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    translation_model_path = "./models/Helsinki-NLP--opus-mt-zh-en"
-    try:
-        translator_tokenizer = MarianTokenizer.from_pretrained(translation_model_path)
-        translation_model_dir = Path(translation_model_path)
-        if (translation_model_dir / "model.safetensors").exists():
-            translator_model = MarianMTModel.from_pretrained(
-                translation_model_path,
-                use_safetensors=True,
-            ).to(device)
-            logger.info("Loaded translator from %s", translation_model_path)
-        else:
-            translator_model = None
-            logger.warning(
-                "Skip translator load: %s only provides .bin weights and cannot be safely loaded with current torch/transformers.",
-                translation_model_path,
-            )
-    except Exception:
-        translator_tokenizer = None
-        translator_model = None
-        logger.exception("Failed to initialize translator; falling back to untranslated text.")
-
-    roberta_path = "./models/SamLowe--roberta-base-go_emotions"
-    emotion_classifier = pipeline("text-classification", model=roberta_path, top_k=None)
+    Path(TEXT_EMOTION_CACHE_DIR).mkdir(parents=True, exist_ok=True)
+    text_emotion_tokenizer = AutoTokenizer.from_pretrained(
+        TEXT_EMOTION_MODEL,
+        cache_dir=TEXT_EMOTION_CACHE_DIR,
+    )
+    emotion_classifier = pipeline(
+        "text-classification",
+        model=TEXT_EMOTION_MODEL,
+        tokenizer=text_emotion_tokenizer,
+        top_k=None,
+        device=0 if torch.cuda.is_available() else -1,
+    )
+    logger.info("Loaded text emotion model from %s", TEXT_EMOTION_MODEL)
 
     rag = kb_rag
     rag.llm_model_func = local_llm_for_rag
@@ -1898,16 +1920,6 @@ async def local_llm_for_rag(prompt: str, system_prompt: str | None = None, histo
         messages.extend(history_messages)
     messages.append({"role": "user", "content": prompt})
     return await call_siliconflow_api(messages, max_tokens=512)
-
-
-def translate_zh_to_en(text: str) -> str:
-    if not translator_tokenizer or not translator_model:
-        return text
-    inputs = translator_tokenizer(text, return_tensors="pt", padding=True).to(translator_model.device)
-    translated = translator_model.generate(**inputs)
-    return translator_tokenizer.decode(translated[0], skip_special_tokens=True)
-
-
 class ChatRequest(BaseModel):
     message: str
     input_mode: str = "text"
@@ -2019,11 +2031,10 @@ async def chat_endpoint(req: ChatRequest):
     speech_emotions_data = normalize_emotion_percentages(req.speech_emotions or [], decimals=1) if req.speech_emotions else []
 
     try:
-        text_en = translate_zh_to_en(user_input)
-        all_results = emotion_classifier(text_en)[0]
+        all_results = emotion_classifier(user_input)[0]
         all_results.sort(key=lambda item: item["score"], reverse=True)
         raw_emotions = [
-            {"name": emotion_map.get(item["label"], item["label"]), "value": float(item["score"]) * 100.0}
+            {"name": map_text_emotion_label(item["label"]), "value": float(item["score"]) * 100.0}
             for item in all_results[:5]
         ]
         emotions_data = normalize_emotion_percentages(raw_emotions, decimals=1)
