@@ -2,7 +2,7 @@
 
 ## 功能目标
 
-本项目原本主要基于用户文本做情绪识别。现在新增语音输入链路：用户在前端选择语音模式后，浏览器录音并尽量调用浏览器内置语音转写，后端使用语音情感识别模型分析音频情绪，再将文本情绪与语音情绪融合，形成多模态情绪画像。
+本项目保留原始文本链路：中文先经 Marian 翻译桥转为英文，再交给 GoEmotions 分类器；`Johnson8187/Chinese-Emotion-Small` 作为本地中文备用分类器。现在新增语音输入链路：用户在前端选择语音模式后，浏览器录音并尽量调用浏览器内置语音转写，后端使用语音情感识别模型分析音频情绪，再将文本情绪与语音情绪融合，形成多模态情绪画像。
 
 文本输入时仍只使用文本情绪识别。语音输入时会同时展示语音情绪条形图，并在实时情绪感知面板中展示融合后的最终情绪。
 
@@ -77,14 +77,27 @@ PY
 
 ## 启动服务
 
+第一次启动前先把本地 `.bin` 翻译权重转换成当前环境可安全加载的 `safetensors`：
+
 ```bash
 conda activate echomimic_v3
 cd /root/autodl-tmp
+python -m tools.prepare_translation_bridge
+```
 
+然后启动：
+
+```bash
+conda activate echomimic_v3
+cd /root/autodl-tmp
+unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
 export SILICONFLOW_API_KEY=你的key
-export SPEECH_EMOTION_CACHE_DIR=/root/autodl-tmp/models/speech-emotion
+export TRANSLATION_MODEL_PATH=/root/autodl-tmp/models/Helsinki-NLP--opus-mt-zh-en
+export ENGLISH_EMOTION_MODEL_PATH=/root/autodl-tmp/models/SamLowe--roberta-base-go_emotions
+export TEXT_EMOTION_MODEL=Johnson8187/Chinese-Emotion-Small
+export TEXT_EMOTION_CACHE_DIR=/root/autodl-tmp/models/text-emotion
+export SPEECH_EMOTION_MODEL=/root/autodl-tmp/models/speech-emotion-direct
 export OMP_NUM_THREADS=1
-
 uvicorn app.web_app:app --host 0.0.0.0 --port 8000
 ```
 
@@ -150,9 +163,9 @@ docs/figures/
 
 包含：
 
-- `figure_1_architecture.svg`: 系统架构
-- `figure_2_emotion_fusion.svg`: 文本-语音情绪融合
-- `figure_3_system_profile.svg`: 系统能力与资源画像
+- `figure_1_case_trace.svg`: 单句输入在系统中的运行产物
+- `figure_2_multimodal_fusion.svg`: 文本、语音与融合情绪对照
+- `figure_3_graph_evidence.svg`: 真实图谱证据子图
 
 SVG 可以直接插入 PPT、论文或用浏览器打开。若需要 PNG，可在本地用浏览器、Inkscape 或设计软件导出，能保持中文字体质量。
 
