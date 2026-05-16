@@ -9,7 +9,7 @@ import torch
 
 DEFAULT_SPEECH_EMOTION_MODEL = os.getenv(
     "SPEECH_EMOTION_MODEL",
-    "superb/wav2vec2-base-superb-er",
+    "Dpngtm/wav2vec2-emotion-recognition",
 )
 DEFAULT_SPEECH_EMOTION_CACHE_DIR = os.getenv(
     "SPEECH_EMOTION_CACHE_DIR",
@@ -54,16 +54,17 @@ class SpeechEmotionRecognizer:
             if self._model is not None and self._feature_extractor is not None:
                 return
 
-            from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
+            from transformers import AutoProcessor, AutoModelForAudioClassification
 
             Path(self.cache_dir).mkdir(parents=True, exist_ok=True)
-            self._feature_extractor = AutoFeatureExtractor.from_pretrained(
+            self._feature_extractor = AutoProcessor.from_pretrained(
                 self.model_name_or_path,
                 cache_dir=self.cache_dir,
             )
             self._model = AutoModelForAudioClassification.from_pretrained(
                 self.model_name_or_path,
                 cache_dir=self.cache_dir,
+                use_safetensors=True,
             )
             self._model.to(self.device)
             self._model.eval()

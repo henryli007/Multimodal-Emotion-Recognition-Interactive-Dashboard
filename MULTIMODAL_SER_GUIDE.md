@@ -11,15 +11,15 @@
 默认模型：
 
 ```text
-superb/wav2vec2-base-superb-er
+Dpngtm/wav2vec2-emotion-recognition
 ```
 
 选择理由：
 
-- 基于 Wav2Vec2，属于成熟的自监督语音表征路线。
-- 面向 SUPERB Emotion Recognition 任务，Transformers 原生支持 `AutoModelForAudioClassification`。
-- 体积适中，适合先在 4090D 环境中稳定落地。
-- 标签覆盖常见语音情绪：愤怒、高兴、平静、悲伤等。
+- 直接提供 `model.safetensors`，能避开当前 `torch 2.3 + transformers 4.57` 对 `.bin` 权重加载的限制。
+- 基于 Wav2Vec2，Transformers 原生支持 `AutoModelForAudioClassification`，部署路径简单。
+- 模型规模适中，适合先在 4090D 环境中稳定落地。
+- 标签覆盖常见语音情绪，便于前端做实时可视化展示。
 
 相关模型页面：
 
@@ -27,7 +27,7 @@ superb/wav2vec2-base-superb-er
 - https://huggingface.co/Dpngtm/wav2vec2-emotion-recognition
 - https://huggingface.co/speechbrain/emotion-recognition-wav2vec2-IEMOCAP
 
-如果后续要提高效果，可以替换 `SPEECH_EMOTION_MODEL`。SpeechBrain 的 IEMOCAP 模型在部分资料中标称 IEMOCAP 测试准确率约 78.7%，但集成方式和依赖更重；当前先选 Hugging Face Transformers 路线，部署风险更低。
+`superb/wav2vec2-base-superb-er` 只有 `pytorch_model.bin`，而当前 Transformers 会阻止 `torch<2.6` 读取这类权重，因此不再作为默认方案。SpeechBrain 的 IEMOCAP 模型在部分资料中标称 IEMOCAP 测试准确率约 78.7%，但集成方式和依赖更重；当前先选 Hugging Face Transformers 路线，部署风险更低。
 
 ## 环境变量
 
@@ -35,7 +35,7 @@ superb/wav2vec2-base-superb-er
 
 ```bash
 export SILICONFLOW_API_KEY=你的key
-export SPEECH_EMOTION_MODEL=superb/wav2vec2-base-superb-er
+export SPEECH_EMOTION_MODEL=Dpngtm/wav2vec2-emotion-recognition
 export SPEECH_EMOTION_CACHE_DIR=/root/autodl-tmp/models/speech-emotion
 export OMP_NUM_THREADS=1
 ```
@@ -62,11 +62,15 @@ conda activate echomimic_v3
 export SPEECH_EMOTION_CACHE_DIR=/root/autodl-tmp/models/speech-emotion
 
 python - <<'PY'
-from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
-model = "superb/wav2vec2-base-superb-er"
+from transformers import AutoProcessor, AutoModelForAudioClassification
+model = "Dpngtm/wav2vec2-emotion-recognition"
 cache_dir = "/root/autodl-tmp/models/speech-emotion"
-AutoFeatureExtractor.from_pretrained(model, cache_dir=cache_dir)
-AutoModelForAudioClassification.from_pretrained(model, cache_dir=cache_dir)
+AutoProcessor.from_pretrained(model, cache_dir=cache_dir)
+AutoModelForAudioClassification.from_pretrained(
+    model,
+    cache_dir=cache_dir,
+    use_safetensors=True,
+)
 print("speech emotion model cached:", cache_dir)
 PY
 ```
@@ -119,7 +123,7 @@ curl -X POST http://127.0.0.1:8000/speech_emotion \
     {"name": "紧张", "value": 62.1},
     {"name": "平静", "value": 21.4}
   ],
-  "speech_emotion_model": "superb/wav2vec2-base-superb-er"
+  "speech_emotion_model": "Dpngtm/wav2vec2-emotion-recognition"
 }
 ```
 
