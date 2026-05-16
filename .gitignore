@@ -13,6 +13,7 @@ __pycache__/
 # Generated runtime data
 static/media/
 workspace/uploads/
+workspace/voice_sessions/
 workspace/report_figures/
 workspace/lightrag/
 workspace/knowledge_graph_visualization.html

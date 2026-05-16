@@ -27,7 +27,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.responses import Response
-from transformers import AutoTokenizer, pipeline
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, MarianMTModel, MarianTokenizer, pipeline
 
 from app.knowledge_base import SILICONFLOW_API_KEY as KB_SILICONFLOW_API_KEY
 from app.knowledge_base import rag as kb_rag
@@ -36,6 +36,19 @@ from lightrag import QueryParam
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+def load_project_env(env_path: Path) -> None:
+    if not env_path.exists():
+        return
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+load_project_env(PROJECT_ROOT / ".env")
 WORKING_DIR = str(PROJECT_ROOT / "workspace" / "lightrag")
 STATIC_DIR = str(PROJECT_ROOT / "static")
 MEDIA_DIR = str(Path(STATIC_DIR) / "media")
@@ -43,6 +56,9 @@ SOURCE_IMAGE = os.getenv("SOURCE_IMAGE", str(Path(STATIC_DIR) / "image.png"))
 GRAPHML_PATH = str(Path(WORKING_DIR) / "graph_chunk_entity_relation.graphml")
 
 SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY") or KB_SILICONFLOW_API_KEY
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
 WAV2LIP_DIR = os.getenv("WAV2LIP_DIR", "")
 WAV2LIP_PYTHON = os.getenv("WAV2LIP_PYTHON", "")
 WAV2LIP_CHECKPOINT = os.getenv("WAV2LIP_CHECKPOINT", "")
@@ -87,7 +103,9 @@ ECHOMIMIC_V3_GPU_MEMORY_MODE = os.getenv("ECHOMIMIC_V3_GPU_MEMORY_MODE", "sequen
 ECHOMIMIC_V3_EXTRA_ARGS = os.getenv("ECHOMIMIC_V3_EXTRA_ARGS", "")
 os.makedirs(MEDIA_DIR, exist_ok=True)
 UPLOAD_DIR = str(PROJECT_ROOT / "workspace" / "uploads")
+VOICE_SESSION_DIR = PROJECT_ROOT / "workspace" / "voice_sessions"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+VOICE_SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
 GRAPH_TERM_ALIASES: dict[str, list[str]] = {
     "pressure": ["压力"],
@@ -661,6 +679,46 @@ def derive_graph_highlights(
                     break
 
     return selected_names[:limit_nodes], selected_edges[:limit_edges]
+
+
+def build_local_rag_keywords(user_input: str, top_emotions: list[str]) -> tuple[list[str], list[str]]:
+    """Provide deterministic retrieval hints so graph lookup does not depend entirely on LLM JSON extraction."""
+    text = str(user_input or "")
+    text_norm = normalize_text(text)
+    snapshot = load_graph_snapshot()
+    matched_nodes: list[str] = []
+    for node in snapshot["nodes"]:
+        name = str(node["name"]).strip()
+        node_norm = normalize_text(name)
+        if len(name) >= 2 and node_norm and node_norm in text_norm:
+            matched_nodes.append(name)
+    # More specific matches first; this avoids broad words crowding out concrete concepts.
+    matched_nodes = sorted(set(matched_nodes), key=lambda item: (-len(item), item))[:8]
+    high_level = [str(item).strip() for item in top_emotions if str(item).strip()][:4]
+    low_level = matched_nodes or [text]
+    return high_level, low_level
+
+
+async def build_rag_keywords(user_input: str, top_emotions: list[str]) -> tuple[list[str], list[str]]:
+    local_high, local_low = build_local_rag_keywords(user_input, top_emotions)
+    try:
+        model_high, model_low = await extract_rag_keywords_structured(user_input, top_emotions)
+    except Exception:
+        logger.exception("Structured DeepSeek keyword extraction failed; using local keywords only.")
+        model_high, model_low = [], []
+
+    def merge(*groups: list[str], limit: int) -> list[str]:
+        merged: list[str] = []
+        seen: set[str] = set()
+        for group in groups:
+            for item in group:
+                normalized = normalize_text(item)
+                if normalized and normalized not in seen:
+                    seen.add(normalized)
+                    merged.append(item)
+        return merged[:limit]
+
+    return merge(model_high, local_high, limit=8), merge(model_low, local_low, limit=12)
 
 
 def build_graph_grounding_brief(
@@ -1784,8 +1842,20 @@ class NoCacheStaticFiles(StaticFiles):
 
 app.mount("/static", NoCacheStaticFiles(directory=STATIC_DIR), name="static")
 
-emotion_classifier = None
+translator_tokenizer = None
+translator_model = None
+english_emotion_classifier = None
+text_emotion_tokenizer = None
+text_emotion_model = None
 rag = None
+TRANSLATION_MODEL_PATH = os.getenv(
+    "TRANSLATION_MODEL_PATH",
+    str(PROJECT_ROOT / "models" / "Helsinki-NLP--opus-mt-zh-en"),
+)
+ENGLISH_EMOTION_MODEL_PATH = os.getenv(
+    "ENGLISH_EMOTION_MODEL_PATH",
+    str(PROJECT_ROOT / "models" / "SamLowe--roberta-base-go_emotions"),
+)
 TEXT_EMOTION_MODEL = os.getenv("TEXT_EMOTION_MODEL", "Johnson8187/Chinese-Emotion-Small")
 TEXT_EMOTION_CACHE_DIR = os.getenv(
     "TEXT_EMOTION_CACHE_DIR",
@@ -1855,66 +1925,83 @@ def map_text_emotion_label(label: str) -> str:
     return emotion_map.get(raw, emotion_map.get(raw.lower(), raw))
 
 
-def local_text_emotion_model_ready(model_name_or_path: str, cache_dir: str) -> bool:
-    candidate = Path(model_name_or_path).expanduser()
-    if candidate.exists() and (
-        (candidate / "model.safetensors").exists() or (candidate / "pytorch_model.bin").exists()
-    ):
-        return True
-
-    cache_root = Path(cache_dir)
-    if not cache_root.exists():
-        return False
-
-    if any(cache_root.rglob("model.safetensors")) or any(cache_root.rglob("pytorch_model.bin")):
-        return True
-    return False
+TEXT_EMOTION_LABELS = {
+    0: "平淡語氣",
+    1: "關切語調",
+    2: "開心語調",
+    3: "憤怒語調",
+    4: "悲傷語調",
+    5: "疑問語調",
+    6: "驚奇語調",
+    7: "厭惡語調",
+}
 
 
-async def analyze_text_emotions_with_llm(text: str) -> list[dict[str, Any]]:
-    prompt = [
+def chinese_backup_cache_ready() -> bool:
+    cache_root = Path(TEXT_EMOTION_CACHE_DIR)
+    return cache_root.exists() and any(cache_root.rglob("model.safetensors"))
+
+
+def load_text_emotion_model() -> tuple[Any, Any]:
+    """Load the Chinese local backup classifier."""
+    Path(TEXT_EMOTION_CACHE_DIR).mkdir(parents=True, exist_ok=True)
+    tokenizer = AutoTokenizer.from_pretrained(
+        TEXT_EMOTION_MODEL,
+        cache_dir=TEXT_EMOTION_CACHE_DIR,
+    )
+    model = AutoModelForSequenceClassification.from_pretrained(
+        TEXT_EMOTION_MODEL,
+        cache_dir=TEXT_EMOTION_CACHE_DIR,
+        use_safetensors=True,
+    )
+    model.to("cuda" if torch.cuda.is_available() else "cpu")
+    model.eval()
+    return tokenizer, model
+
+
+def translate_zh_to_en(text: str) -> str:
+    if translator_tokenizer is None or translator_model is None:
+        raise RuntimeError("中英翻译桥尚未加载。")
+    inputs = translator_tokenizer(text, return_tensors="pt", padding=True, truncation=True).to(translator_model.device)
+    with torch.inference_mode():
+        translated = translator_model.generate(**inputs, max_new_tokens=128)
+    return translator_tokenizer.decode(translated[0], skip_special_tokens=True)
+
+
+def ensure_chinese_backup_loaded() -> None:
+    global text_emotion_tokenizer, text_emotion_model
+    if text_emotion_tokenizer is None or text_emotion_model is None:
+        text_emotion_tokenizer, text_emotion_model = load_text_emotion_model()
+        logger.info("Loaded Chinese text emotion backup from %s", TEXT_EMOTION_MODEL)
+
+
+def analyze_text_emotions_with_chinese_backup(text: str) -> list[dict[str, Any]]:
+    ensure_chinese_backup_loaded()
+    assert text_emotion_tokenizer is not None and text_emotion_model is not None
+    inputs = text_emotion_tokenizer(
+        text,
+        return_tensors="pt",
+        truncation=True,
+        padding=True,
+    ).to(text_emotion_model.device)
+    with torch.inference_mode():
+        probabilities = torch.softmax(text_emotion_model(**inputs).logits[0], dim=-1).detach().cpu()
+    ranked_indexes = torch.argsort(probabilities, descending=True).tolist()[:5]
+    raw_emotions = [
         {
-            "role": "system",
-            "content": (
-                "你是一个中文情绪识别器。"
-                "请根据用户文本输出前5个最相关情绪及百分比。"
-                "只输出 JSON 数组，每个元素格式为 "
-                '{"name":"情绪","value":数值}。'
-                "百分比总和必须约等于100。"
-                "情绪名称请使用中文，优先从这些词中选择："
-                "平静、紧张、焦虑、悲伤、高兴、愤怒、困惑、失望、关心、惊讶、厌恶、渴望、宽慰、乐观。"
-            ),
-        },
-        {
-            "role": "user",
-            "content": f"请分析下面这句话的情绪：{text}",
-        },
+            "name": map_text_emotion_label(TEXT_EMOTION_LABELS.get(index, f"LABEL_{index}")),
+            "value": float(probabilities[index]) * 100.0,
+        }
+        for index in ranked_indexes
     ]
-    raw = await call_siliconflow_api(prompt, max_tokens=180)
-    match = re.search(r"\[[\s\S]*\]", raw)
-    payload = match.group(0) if match else raw
-    parsed = json.loads(payload)
-    if not isinstance(parsed, list):
-        raise ValueError("LLM emotion output is not a list")
-    sanitized = []
-    for item in parsed[:5]:
-        if not isinstance(item, dict):
-            continue
-        name = map_text_emotion_label(str(item.get("name", "")).strip())
-        try:
-            value = float(item.get("value", 0.0))
-        except Exception:
-            value = 0.0
-        if name:
-            sanitized.append({"name": name, "value": max(0.0, value)})
-    return normalize_emotion_percentages(sanitized or [{"name": "平静", "value": 100.0}], decimals=1)
+    return normalize_emotion_percentages(raw_emotions, decimals=1)
 
 
 async def analyze_text_emotions(text: str) -> list[dict[str, Any]]:
-    global emotion_classifier
-    if emotion_classifier is not None:
+    if english_emotion_classifier is not None:
         try:
-            all_results = emotion_classifier(text)[0]
+            translated_text = await asyncio.to_thread(translate_zh_to_en, text)
+            all_results = await asyncio.to_thread(lambda: english_emotion_classifier(translated_text)[0])
             all_results.sort(key=lambda item: item["score"], reverse=True)
             raw_emotions = [
                 {"name": map_text_emotion_label(item["label"]), "value": float(item["score"]) * 100.0}
@@ -1922,41 +2009,48 @@ async def analyze_text_emotions(text: str) -> list[dict[str, Any]]:
             ]
             return normalize_emotion_percentages(raw_emotions, decimals=1)
         except Exception:
-            logger.exception("Local text emotion model inference failed; fallback to LLM.")
+            logger.exception("English GoEmotions path failed; use Chinese local backup model.")
+    return await asyncio.to_thread(analyze_text_emotions_with_chinese_backup, text)
 
-    return await analyze_text_emotions_with_llm(text)
+
+def load_primary_text_emotion_path() -> tuple[Any, Any, Any]:
+    translation_dir = Path(TRANSLATION_MODEL_PATH)
+    if not (translation_dir / "model.safetensors").exists():
+        raise FileNotFoundError(
+            f"翻译模型缺少兼容权重：{translation_dir / 'model.safetensors'}；先运行 python -m tools.prepare_translation_bridge"
+        )
+    tokenizer = MarianTokenizer.from_pretrained(TRANSLATION_MODEL_PATH)
+    model = MarianMTModel.from_pretrained(TRANSLATION_MODEL_PATH, use_safetensors=True)
+    model.to("cuda" if torch.cuda.is_available() else "cpu")
+    model.eval()
+    classifier_tokenizer = AutoTokenizer.from_pretrained(ENGLISH_EMOTION_MODEL_PATH, local_files_only=True)
+    classifier_model = AutoModelForSequenceClassification.from_pretrained(
+        ENGLISH_EMOTION_MODEL_PATH,
+        local_files_only=True,
+        use_safetensors=True,
+    )
+    classifier = pipeline(
+        "text-classification",
+        model=classifier_model,
+        tokenizer=classifier_tokenizer,
+        top_k=None,
+        device=0 if torch.cuda.is_available() else -1,
+    )
+    return tokenizer, model, classifier
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    global emotion_classifier, rag
+    global translator_tokenizer, translator_model, english_emotion_classifier
+    global text_emotion_tokenizer, text_emotion_model, rag
 
-    try:
-        Path(TEXT_EMOTION_CACHE_DIR).mkdir(parents=True, exist_ok=True)
-        if local_text_emotion_model_ready(TEXT_EMOTION_MODEL, TEXT_EMOTION_CACHE_DIR):
-            text_emotion_tokenizer = AutoTokenizer.from_pretrained(
-                TEXT_EMOTION_MODEL,
-                cache_dir=TEXT_EMOTION_CACHE_DIR,
-                local_files_only=True,
-            )
-            emotion_classifier = pipeline(
-                "text-classification",
-                model=TEXT_EMOTION_MODEL,
-                tokenizer=text_emotion_tokenizer,
-                top_k=None,
-                device=0 if torch.cuda.is_available() else -1,
-                local_files_only=True,
-            )
-            logger.info("Loaded text emotion model from %s", TEXT_EMOTION_MODEL)
-        else:
-            emotion_classifier = None
-            logger.warning(
-                "Local text emotion model cache not found for %s; use LLM fallback instead of blocking startup.",
-                TEXT_EMOTION_MODEL,
-            )
-    except Exception:
-        emotion_classifier = None
-        logger.exception("Failed to initialize local text emotion model; fallback to LLM text emotion analysis.")
+    translator_tokenizer, translator_model, english_emotion_classifier = await asyncio.to_thread(load_primary_text_emotion_path)
+    logger.info("Loaded primary text emotion path: translator=%s, classifier=%s", TRANSLATION_MODEL_PATH, ENGLISH_EMOTION_MODEL_PATH)
+    if chinese_backup_cache_ready():
+        text_emotion_tokenizer, text_emotion_model = await asyncio.to_thread(load_text_emotion_model)
+        logger.info("Loaded Chinese text emotion backup from %s", TEXT_EMOTION_MODEL)
+    else:
+        logger.warning("Chinese text emotion backup is not cached yet; primary GoEmotions path remains active.")
 
     rag = kb_rag
     rag.llm_model_func = local_llm_for_rag
@@ -1968,6 +2062,59 @@ async def lifespan(_: FastAPI):
 
 
 app.router.lifespan_context = lifespan
+
+
+async def call_deepseek_api(
+    messages: list[dict[str, str]],
+    max_tokens: int = 512,
+    *,
+    json_output: bool = False,
+) -> str:
+    if not DEEPSEEK_API_KEY:
+        raise RuntimeError("未配置 DEEPSEEK_API_KEY。")
+    payload: dict[str, Any] = {
+        "model": DEEPSEEK_MODEL,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": 0.2 if json_output else 0.7,
+        "thinking": {"type": "disabled"},
+    }
+    if json_output:
+        payload["response_format"] = {"type": "json_object"}
+    headers = {
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.post(f"{DEEPSEEK_BASE_URL}/chat/completions", headers=headers, json=payload) as response:
+            if response.status != 200:
+                detail = await response.text()
+                raise RuntimeError(f"DeepSeek API Error {response.status}: {detail}")
+            data = await response.json()
+            return str(data["choices"][0]["message"].get("content") or "")
+
+
+async def extract_rag_keywords_structured(user_input: str, top_emotions: list[str]) -> tuple[list[str], list[str]]:
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是心理咨询知识图谱的检索关键词抽取器。必须输出 json 对象，"
+                "且只包含 high_level_keywords 和 low_level_keywords 两个数组字段。"
+                "EXAMPLE JSON OUTPUT: "
+                '{"high_level_keywords":["焦虑","情绪调节"],"low_level_keywords":["工作压力","失眠"]}'
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"json 输出。融合情绪：{top_emotions}。用户原话：{user_input}",
+        },
+    ]
+    raw = await call_deepseek_api(messages, max_tokens=180, json_output=True)
+    payload = json.loads(raw or "{}")
+    high = [str(item).strip() for item in payload.get("high_level_keywords", []) if str(item).strip()][:6]
+    low = [str(item).strip() for item in payload.get("low_level_keywords", []) if str(item).strip()][:10]
+    return high, low
 
 
 async def call_siliconflow_api(messages: list[dict[str, str]], max_tokens: int = 512) -> str:
@@ -2004,17 +2151,20 @@ async def local_llm_for_rag(prompt: str, system_prompt: str | None = None, histo
     if history_messages:
         messages.extend(history_messages)
     messages.append({"role": "user", "content": prompt})
-    return await call_siliconflow_api(messages, max_tokens=512)
+    return await call_deepseek_api(messages, max_tokens=512)
 class ChatRequest(BaseModel):
     message: str
     input_mode: str = "text"
     speech_emotions: list[dict[str, Any]] | None = None
     speech_emotion_model: str | None = None
+    voice_session_id: str | None = None
 
 
 class SpeechEmotionResponse(BaseModel):
     emotions: list[dict[str, Any]]
     model: str
+    session_id: str | None = None
+    transcript: str | None = None
     cache_dir: str | None = None
     device: str
     sample_rate: int
@@ -2081,6 +2231,38 @@ def get_graph_data():
     return {"nodes": snapshot["nodes"], "links": snapshot["links"]}
 
 
+def update_voice_session(voice_session_id: str, **fields: Any) -> None:
+    session_path = VOICE_SESSION_DIR / f"{voice_session_id}.json"
+    payload: dict[str, Any] = {}
+    if session_path.exists():
+        try:
+            payload = json.loads(session_path.read_text(encoding="utf-8"))
+        except Exception:
+            logger.exception("Failed to read voice session %s", session_path)
+    payload.update(fields)
+    session_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+async def transcribe_audio_file(audio_path: Path) -> str:
+    if not SILICONFLOW_API_KEY:
+        raise RuntimeError("未配置 SILICONFLOW_API_KEY。")
+    form = aiohttp.FormData()
+    form.add_field("model", os.getenv("SILICONFLOW_ASR_MODEL", "FunAudioLLM/SenseVoiceSmall"))
+    form.add_field(
+        "file",
+        audio_path.read_bytes(),
+        filename=audio_path.name,
+        content_type="application/octet-stream",
+    )
+    headers = {"Authorization": f"Bearer {SILICONFLOW_API_KEY}"}
+    async with aiohttp.ClientSession() as session:
+        async with session.post("https://api.siliconflow.cn/v1/audio/transcriptions", headers=headers, data=form) as response:
+            payload = await response.json(content_type=None)
+            if response.status != 200:
+                raise RuntimeError(f"SiliconFlow ASR Error {response.status}: {payload}")
+            return str(payload.get("text", "")).strip()
+
+
 @app.post("/speech_emotion", response_model=SpeechEmotionResponse)
 async def speech_emotion_endpoint(audio: UploadFile = File(...)):
     if not audio.filename:
@@ -2097,8 +2279,24 @@ async def speech_emotion_endpoint(audio: UploadFile = File(...)):
             while chunk := await audio.read(1024 * 1024):
                 output_file.write(chunk)
 
-        result = await asyncio.to_thread(speech_emotion_recognizer.predict_file, saved_path)
+        speech_task = asyncio.to_thread(speech_emotion_recognizer.predict_file, saved_path)
+        transcript_task = transcribe_audio_file(saved_path)
+        result, transcript = await asyncio.gather(speech_task, transcript_task)
+        result["session_id"] = session_id
+        result["transcript"] = transcript or None
         result["media_url"] = None
+        update_voice_session(
+            session_id,
+            session_id=session_id,
+            audio_file=str(saved_path),
+            transcript=transcript or None,
+            speech_emotions=result.get("emotions", []),
+            speech_model=result.get("model"),
+            sample_rate=result.get("sample_rate"),
+            duration_seconds=result.get("duration_seconds"),
+            speech_completed_at=time.strftime("%Y-%m-%d %H:%M:%S"),
+        )
+        logger.info("Voice session %s transcript: %s", session_id, transcript or "<empty>")
         return result
     except HTTPException:
         raise
@@ -2118,10 +2316,9 @@ async def chat_endpoint(req: ChatRequest):
     try:
         emotions_data = await analyze_text_emotions(user_input)
         top_emotions = [item["name"] for item in emotions_data[:2]] or ["平静"]
-    except Exception:
-        traceback.print_exc()
-        emotions_data = [{"name": "平静", "value": 100.0}]
-        top_emotions = ["平静"]
+    except Exception as exc:
+        logger.exception("Text emotion inference failed.")
+        raise HTTPException(status_code=503, detail=f"文本情绪识别失败：{exc}") from exc
 
     text_emotions_data = emotions_data
     if input_mode == "voice" and speech_emotions_data:
@@ -2131,10 +2328,17 @@ async def chat_endpoint(req: ChatRequest):
     node_filter.reset()
     query_failed = False
     try:
+        rag_hl_keywords, rag_ll_keywords = await build_rag_keywords(user_input, top_emotions)
+        logger.info("RAG keywords: high=%s low=%s", rag_hl_keywords, rag_ll_keywords)
         raw_knowledge = await asyncio.to_thread(
             rag.query,
             user_input,
-            param=QueryParam(mode="hybrid", top_k=3),
+            param=QueryParam(
+                mode="hybrid",
+                top_k=3,
+                hl_keywords=rag_hl_keywords,
+                ll_keywords=rag_ll_keywords,
+            ),
         )
         retrieved_knowledge = stringify_knowledge(raw_knowledge)
     except Exception:
@@ -2191,12 +2395,21 @@ async def chat_endpoint(req: ChatRequest):
     ]
 
     try:
-        response_text = await call_siliconflow_api(current_messages, max_tokens=300)
+        response_text = await call_deepseek_api(current_messages, max_tokens=300)
     except Exception as exc:
         traceback.print_exc()
         response_text = f"抱歉，回答生成时出现了问题：{exc}"
 
     response_text = normalize_generated_reply(response_text)
+    if req.voice_session_id:
+        update_voice_session(
+            req.voice_session_id,
+            chat_message=user_input,
+            text_emotions=text_emotions_data,
+            fused_emotions=emotions_data,
+            reply=response_text,
+            chat_completed_at=time.strftime("%Y-%m-%d %H:%M:%S"),
+        )
     speech_text = await build_speech_script(
         response_text,
         user_input=user_input,

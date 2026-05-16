@@ -106,7 +106,7 @@
             align-items: center;
             gap: 10px;
             padding: 10px 16px;
-            border-radius: 999px;
+            border-radius: 20px;
             border: 1px solid rgba(214, 221, 212, 0.95);
             background: rgba(255, 255, 255, 0.72);
             box-shadow: 0 12px 32px rgba(140, 151, 136, 0.12);
@@ -135,7 +135,7 @@
 
         .side-column {
             display: grid;
-            grid-template-rows: minmax(0, 0.86fr) minmax(0, 1fr);
+            grid-template-rows: minmax(390px, auto) minmax(0, 1fr);
             gap: 18px;
             min-height: 0;
         }
@@ -703,6 +703,38 @@
             margin-top: 12px;
         }
 
+        .voice-pipeline {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 6px;
+            margin-top: 12px;
+        }
+
+        .voice-pipeline-step {
+            min-width: 0;
+            padding: 7px 5px;
+            border-radius: 12px;
+            border: 1px solid #dfe7e2;
+            background: rgba(255,255,255,0.78);
+            color: #829087;
+            font-size: 0.72rem;
+            font-weight: 800;
+            line-height: 1.25;
+            text-align: center;
+        }
+
+        .voice-pipeline-step.active {
+            border-color: #edbd94;
+            background: #fff6ee;
+            color: #b86a36;
+        }
+
+        .voice-pipeline-step.done {
+            border-color: #b7dac7;
+            background: #edf7f1;
+            color: #4d876b;
+        }
+
         .voice-emotion-row {
             display: grid;
             grid-template-columns: minmax(52px, 72px) 1fr minmax(42px, auto);
@@ -787,7 +819,7 @@
 
         .emotion-chart {
             flex: 1;
-            min-height: 180px;
+            min-height: 150px;
         }
 
         .emotion-legend {
@@ -815,13 +847,48 @@
             box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.9);
         }
 
+        .emotion-source-strip {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .emotion-source-item {
+            min-height: 52px;
+            padding: 9px 10px;
+            border-radius: 14px;
+            border: 1px solid #e4ebe6;
+            background: rgba(248, 251, 249, 0.92);
+        }
+
+        .emotion-source-item strong {
+            display: block;
+            color: #7a877f;
+            font-size: 0.72rem;
+            letter-spacing: 0.04em;
+        }
+
+        .emotion-source-item span {
+            display: block;
+            margin-top: 4px;
+            color: #30483c;
+            font-size: 0.86rem;
+            font-weight: 700;
+        }
+
+        .emotion-source-item.fused {
+            border-color: #b9dac8;
+            background: #edf7f1;
+        }
+
         .emotion-insight {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             gap: 12px;
             margin-top: 12px;
             padding: 12px 14px;
-            border-radius: 999px;
+            border-radius: 20px;
             background: linear-gradient(135deg, #f1f8f3, #f8fbf7);
             border: 1px solid #e2ede5;
             color: #5a7868;
@@ -1459,6 +1526,14 @@
                         </div>
                     </div>
                     <div id="voice-emotion-preview" class="voice-emotion-preview"></div>
+                    <div id="voice-pipeline" class="voice-pipeline" aria-label="语音处理进度">
+                        <div class="voice-pipeline-step" data-stage="recorded">录音完成</div>
+                        <div class="voice-pipeline-step" data-stage="ser">语音情绪</div>
+                        <div class="voice-pipeline-step" data-stage="asr">语音转写</div>
+                        <div class="voice-pipeline-step" data-stage="fusion">情绪融合</div>
+                        <div class="voice-pipeline-step" data-stage="graph">图谱检索</div>
+                        <div class="voice-pipeline-step" data-stage="avatar">数字人生成</div>
+                    </div>
                 </div>
 
                 <div class="composer-shell">
@@ -1497,6 +1572,11 @@
 
                     <div id="emotion-chart" class="emotion-chart"></div>
                     <div id="emotion-legend" class="emotion-legend"></div>
+                    <div id="emotion-source-strip" class="emotion-source-strip">
+                        <div class="emotion-source-item"><strong>文本语义</strong><span>待分析</span></div>
+                        <div class="emotion-source-item"><strong>语音语气</strong><span>未提供</span></div>
+                        <div class="emotion-source-item fused"><strong>融合判断</strong><span>待分析</span></div>
+                    </div>
                     <div id="emotion-insight" class="emotion-insight">
                         <i class="fa-solid fa-seedling"></i>
                         <span>你的情绪状态会在这里更新，我会根据识别结果给出更贴近当下的建议。</span>
@@ -1639,8 +1719,10 @@
         const voiceRecordBtn = document.getElementById("voice-record-btn");
         const voiceStatusEl = document.getElementById("voice-status");
         const voiceEmotionPreviewEl = document.getElementById("voice-emotion-preview");
+        const voicePipelineEl = document.getElementById("voice-pipeline");
         const playbackOverlayEl = document.getElementById("playback-overlay");
         const emotionLegendEl = document.getElementById("emotion-legend");
+        const emotionSourceStripEl = document.getElementById("emotion-source-strip");
         const emotionInsightEl = document.getElementById("emotion-insight");
         const connectionLabelEl = document.getElementById("connection-label");
         const emotionChart = window.echarts ? echarts.init(document.getElementById("emotion-chart")) : null;
@@ -1704,6 +1786,7 @@
         let voiceStream = null;
         let voiceChunks = [];
         let voiceEmotionResult = null;
+        let voicePipelineTimers = [];
         let speechRecognition = null;
         let speechRecognitionActive = false;
 
@@ -2552,6 +2635,28 @@
             }).join("");
         }
 
+        const VOICE_PIPELINE_STAGES = ["recorded", "ser", "asr", "fusion", "graph", "avatar"];
+
+        function updateVoicePipeline(stage, completed = false) {
+            if (!voicePipelineEl) return;
+            const currentIndex = VOICE_PIPELINE_STAGES.indexOf(stage);
+            voicePipelineEl.querySelectorAll(".voice-pipeline-step").forEach(function(step, index) {
+                step.classList.remove("active", "done");
+                if (currentIndex >= 0 && index < currentIndex) step.classList.add("done");
+                if (currentIndex >= 0 && index === currentIndex) step.classList.add(completed ? "done" : "active");
+                if (completed && currentIndex === VOICE_PIPELINE_STAGES.length - 1) step.classList.add("done");
+            });
+        }
+
+        function resetVoicePipeline() {
+            voicePipelineTimers.forEach(function(timer) { window.clearTimeout(timer); });
+            voicePipelineTimers = [];
+            if (!voicePipelineEl) return;
+            voicePipelineEl.querySelectorAll(".voice-pipeline-step").forEach(function(step) {
+                step.classList.remove("active", "done");
+            });
+        }
+
         function renderVoiceEmotionPreview(emotions) {
             if (!voiceEmotionPreviewEl) return;
             if (!Array.isArray(emotions) || !emotions.length) {
@@ -2570,6 +2675,21 @@
                     </div>
                 `;
             }).join("");
+        }
+
+        function topEmotionText(items, emptyText = "未提供") {
+            if (!Array.isArray(items) || !items.length) return emptyText;
+            const item = items[0];
+            return `${item.name} ${formatPercentage(item.value)}`;
+        }
+
+        function updateEmotionSources(textEmotions = [], speechEmotions = [], fusedEmotions = []) {
+            if (!emotionSourceStripEl) return;
+            emotionSourceStripEl.innerHTML = `
+                <div class="emotion-source-item"><strong>文本语义</strong><span>${escapeHtml(topEmotionText(textEmotions, "待分析"))}</span></div>
+                <div class="emotion-source-item"><strong>语音语气</strong><span>${escapeHtml(topEmotionText(speechEmotions, "未提供"))}</span></div>
+                <div class="emotion-source-item fused"><strong>融合判断</strong><span>${escapeHtml(topEmotionText(fusedEmotions, "待分析"))}</span></div>
+            `;
         }
 
         function updateEmotionPanel(rawEmotions) {
@@ -2669,6 +2789,7 @@
             setInputMode("voice");
             voiceEmotionResult = null;
             renderVoiceEmotionPreview([]);
+            resetVoicePipeline();
             voiceChunks = [];
 
             try {
@@ -2712,6 +2833,7 @@
                 voiceStream.getTracks().forEach(function(track) { track.stop(); });
             }
 
+            updateVoicePipeline("recorded", true);
             const mimeType = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : "audio/webm";
             const blob = new Blob(voiceChunks, { type: mimeType });
             if (!blob.size) {
@@ -2719,7 +2841,8 @@
                 return;
             }
 
-            voiceStatusEl.textContent = "正在识别语音情绪...";
+            voiceStatusEl.textContent = "正在识别语音情绪并转写...";
+            updateVoicePipeline("ser");
             const formData = new FormData();
             const extension = mimeType.includes("mp4") ? "m4a" : (mimeType.includes("wav") ? "wav" : "webm");
             formData.append("audio", blob, `voice-input.${extension}`);
@@ -2735,10 +2858,23 @@
                 }
                 voiceEmotionResult = data;
                 renderVoiceEmotionPreview(data.emotions || []);
+                updateVoicePipeline("asr", true);
                 const top = Array.isArray(data.emotions) && data.emotions.length ? data.emotions[0] : null;
-                voiceStatusEl.textContent = top
-                    ? `语音情绪：${top.name} ${formatPercentage(top.value)}`
-                    : "语音情绪已识别。";
+                await new Promise(function(resolve) { window.setTimeout(resolve, 250); });
+                const transcript = (chatInputEl.value.trim() || String(data.transcript || "").trim());
+                if (!chatInputEl.value.trim() && transcript) {
+                    chatInputEl.value = transcript;
+                }
+                if (transcript) {
+                    voiceStatusEl.textContent = top
+                        ? `语音情绪：${top.name} ${formatPercentage(top.value)}；正在融合文本并生成回复...`
+                        : "语音已识别，正在融合文本并生成回复...";
+                    await sendMessage();
+                } else {
+                    voiceStatusEl.textContent = top
+                        ? `语音情绪：${top.name} ${formatPercentage(top.value)}；未取得转写，请补充文字后发送。`
+                        : "语音情绪已识别，但未取得转写，请补充文字后发送。";
+                }
             } catch (error) {
                 console.error("语音情绪识别失败", error);
                 voiceStatusEl.textContent = `语音情绪识别失败：${error.message}`;
@@ -3973,6 +4109,14 @@
             const requestInputMode = inputMode === "voice" && voiceEmotionResult ? "voice" : "text";
             const requestSpeechEmotions = requestInputMode === "voice" ? (voiceEmotionResult.emotions || []) : [];
             setMediaState("处理中", "生成中", requestInputMode === "voice" ? "正在融合文本与语音情绪" : "正在生成回答与媒体");
+            if (requestInputMode === "voice") {
+                updateVoicePipeline("fusion");
+                voicePipelineTimers.forEach(function(timer) { window.clearTimeout(timer); });
+                voicePipelineTimers = [
+                    window.setTimeout(function() { updateVoicePipeline("graph"); }, 420),
+                    window.setTimeout(function() { updateVoicePipeline("avatar"); }, 900),
+                ];
+            }
 
             const loadingId = `loading-${Date.now()}`;
             appendMessage(
@@ -3993,10 +4137,16 @@
                         input_mode: requestInputMode,
                         speech_emotions: requestSpeechEmotions,
                         speech_emotion_model: voiceEmotionResult ? voiceEmotionResult.model : null,
+                        voice_session_id: voiceEmotionResult ? voiceEmotionResult.session_id : null,
                     })
                 });
 
                 const data = await response.json();
+                if (requestInputMode === "voice") {
+                    voicePipelineTimers.forEach(function(timer) { window.clearTimeout(timer); });
+                    voicePipelineTimers = [];
+                    updateVoicePipeline("avatar", true);
+                }
                 if (!response.ok) {
                     throw new Error(data.detail || "请求失败");
                 }
@@ -4012,6 +4162,7 @@
 
                 try {
                     updateEmotionPanel(data.emotions || []);
+                    updateEmotionSources(data.text_emotions || [], data.speech_emotions || [], data.emotions || []);
                     if (data.speech_emotions && data.speech_emotions.length) {
                         renderVoiceEmotionPreview(data.speech_emotions);
                     }

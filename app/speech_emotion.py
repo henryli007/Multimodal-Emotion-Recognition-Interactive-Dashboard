@@ -1,5 +1,9 @@
 import os
+import shutil
+import subprocess
+import tempfile
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -95,12 +99,13 @@ class SpeechEmotionRecognizer:
 
         target_sr = int(getattr(self._feature_extractor, "sampling_rate", 16000) or 16000)
         max_duration = max(1.0, SPEECH_EMOTION_MAX_SECONDS)
-        waveform, sample_rate = librosa.load(
-            str(audio_path),
-            sr=target_sr,
-            mono=True,
-            duration=max_duration,
-        )
+        with decoded_audio_path(audio_path, target_sr=target_sr, max_duration=max_duration) as readable_path:
+            waveform, sample_rate = librosa.load(
+                str(readable_path),
+                sr=target_sr,
+                mono=True,
+                duration=max_duration,
+            )
         waveform = np.asarray(waveform, dtype=np.float32)
         if waveform.size < int(target_sr * 0.2):
             raise ValueError("音频太短，无法进行稳定的语音情感识别。")
@@ -138,6 +143,60 @@ class SpeechEmotionRecognizer:
             "sample_rate": sample_rate,
             "duration_seconds": round(float(waveform.size) / float(sample_rate), 3),
         }
+
+
+def find_ffmpeg_executable() -> str | None:
+    system_ffmpeg = shutil.which("ffmpeg")
+    if system_ffmpeg:
+        return system_ffmpeg
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+
+@contextmanager
+def decoded_audio_path(audio_path: str | Path, target_sr: int, max_duration: float):
+    """Decode browser/container formats into PCM WAV before librosa sees them."""
+    source_path = Path(audio_path)
+    if source_path.suffix.lower() in {".wav", ".flac"}:
+        yield source_path
+        return
+
+    ffmpeg = find_ffmpeg_executable()
+    if not ffmpeg:
+        raise RuntimeError("无法解码该音频格式：请安装 ffmpeg，或安装 imageio-ffmpeg。")
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+        decoded_path = Path(tmp_file.name)
+    try:
+        command = [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-t",
+            str(max_duration),
+            "-i",
+            str(source_path),
+            "-ac",
+            "1",
+            "-ar",
+            str(target_sr),
+            "-c:a",
+            "pcm_s16le",
+            str(decoded_path),
+        ]
+        completed = subprocess.run(command, capture_output=True, text=True, check=False)
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or "未知 ffmpeg 错误"
+            raise ValueError(f"音频解码失败：{detail}")
+        yield decoded_path
+    finally:
+        decoded_path.unlink(missing_ok=True)
 
 
 def normalize_speech_label(label: str) -> str:

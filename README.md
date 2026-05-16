@@ -4,7 +4,8 @@
 
 - 情绪识别
 - `LightRAG` 心理知识图谱检索
-- SiliconFlow 大模型问答
+- DeepSeek V4 Flash 结构化关键词抽取与心理支持回复
+- SiliconFlow 语音转写与向量嵌入
 - `edge-tts` 中文语音合成
 - 数字人口型视频生成
 - 图谱可视化
@@ -56,7 +57,7 @@
   - 串联情绪识别、RAG 检索、LLM 回复、TTS、数字人生成
 - [app/knowledge_base.py](/root/autodl-tmp/app/knowledge_base.py)
   - 初始化 `LightRAG`
-  - 配置 SiliconFlow 的聊天与向量接口
+  - 配置 SiliconFlow 向量接口
   - 工作区路径已统一到 `workspace/lightrag/`
 
 ### `tools/`
@@ -131,7 +132,13 @@ pip install -r Wav2Lip/requirements.txt
 
 | 变量名 | 说明 | 是否必需 |
 | --- | --- | --- |
-| `SILICONFLOW_API_KEY` | SiliconFlow API Key | 是 |
+| `SILICONFLOW_API_KEY` | SiliconFlow API Key（ASR 与向量嵌入） | 是 |
+| `DEEPSEEK_API_KEY` | DeepSeek API Key（结构化关键词与回复生成） | 是 |
+| `DEEPSEEK_MODEL` | DeepSeek 模型名，默认 `deepseek-v4-flash` | 否 |
+| `TRANSLATION_MODEL_PATH` | Marian 中英翻译桥本地目录 | 否 |
+| `ENGLISH_EMOTION_MODEL_PATH` | GoEmotions 本地模型目录 | 否 |
+| `TEXT_EMOTION_MODEL` | 中文情绪识别备用模型 | 否 |
+| `SPEECH_EMOTION_MODEL` | 语音情绪识别模型目录或 Hub ID | 否 |
 | `SOURCE_IMAGE` | 数字人驱动头像路径 | 否 |
 | `WAV2LIP_DIR` | `Wav2Lip` 项目目录 | 否 |
 | `WAV2LIP_PYTHON` | `Wav2Lip` Python 路径 | 否 |
@@ -166,9 +173,29 @@ python build_kg.py --data ./data/knowledge/data_pro.json
 
 ### 2. 启动服务
 
-推荐：
+先复制环境变量模板并填写两个 API Key：
 
 ```bash
+cp .env.example .env
+# 编辑 .env，填写 SILICONFLOW_API_KEY 与 DEEPSEEK_API_KEY
+```
+
+如果翻译模型目录中只有 `pytorch_model.bin`，先生成当前环境兼容的 safetensors：
+
+```bash
+python -m tools.prepare_translation_bridge
+```
+
+推荐启动命令：
+
+```bash
+unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
+export TRANSLATION_MODEL_PATH=/root/autodl-tmp/models/Helsinki-NLP--opus-mt-zh-en
+export ENGLISH_EMOTION_MODEL_PATH=/root/autodl-tmp/models/SamLowe--roberta-base-go_emotions
+export TEXT_EMOTION_MODEL=Johnson8187/Chinese-Emotion-Small
+export TEXT_EMOTION_CACHE_DIR=/root/autodl-tmp/models/text-emotion
+export SPEECH_EMOTION_MODEL=/root/autodl-tmp/models/speech-emotion-direct
+export OMP_NUM_THREADS=1
 uvicorn app.web_app:app --host 0.0.0.0 --port 8000
 ```
 
@@ -255,11 +282,10 @@ curl -X POST http://127.0.0.1:8000/chat \
 
 ### 语音情感识别
 
-语音输入时，前端会将录音上传到 `/speech_emotion`，后端使用默认模型
-`superb/wav2vec2-base-superb-er` 识别语音情绪。模型缓存建议放在数据盘：
+语音输入时，前端会将录音上传到 `/speech_emotion`。后端会同时执行语音情绪识别和语音转写，再自动进入文本情绪识别、文本/语音融合、图谱检索与数字人回复生成。推荐使用本地 safetensors 模型：
 
 ```bash
-export SPEECH_EMOTION_MODEL=superb/wav2vec2-base-superb-er
+export SPEECH_EMOTION_MODEL=/root/autodl-tmp/models/speech-emotion-direct
 export SPEECH_EMOTION_CACHE_DIR=/root/autodl-tmp/models/speech-emotion
 ```
 
@@ -270,13 +296,13 @@ curl -X POST http://127.0.0.1:8000/speech_emotion \
   -F "audio=@sample.wav"
 ```
 
-语音模式下 `/chat` 会融合文本情绪和语音情绪；文本模式仍只使用文本情绪识别。
+语音模式下 `/chat` 会融合文本情绪和语音情绪；文本模式仍只使用文本情绪识别。前端会显示“录音完成 → 语音情绪 → 语音转写 → 情绪融合 → 图谱检索 → 数字人生成”的处理进度。每次语音会话的原始音频和调试摘要分别保存在 `workspace/uploads/` 与 `workspace/voice_sessions/`（默认忽略，不提交）。
 
 更多说明见 [MULTIMODAL_SER_GUIDE.md](/root/autodl-tmp/MULTIMODAL_SER_GUIDE.md)。
 
 ### 汇报图生成
 
-项目提供中文 SVG 汇报图生成脚本，用于展示系统架构、多模态情绪融合和资源画像：
+项目提供中文 SVG 汇报图生成脚本，用于展示单轮会话产物、多模态融合和图谱证据：
 
 ```bash
 python -m tools.generate_report_figures
@@ -305,6 +331,7 @@ docs/figures/
 - 若未找到数字人后端，系统会自动回退到语音模式
 - 生成的语音和视频会写入 `static/media/`
 - `LightRAG` 工作区现在统一位于 `workspace/lightrag/`
+- 图谱检索关键词由 DeepSeek V4 Flash 的 JSON Output 生成，并与本地确定性关键词合并
 
 ## 后续建议
 
